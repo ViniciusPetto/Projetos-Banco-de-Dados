@@ -9,15 +9,15 @@ GO
 
 create table pessoa (
 codigo int not null,
-nome char(100) not null,
-endereco char(200) null,
-telefone char(20) null,
+nome varchar(100) not null,
+endereco varchar(200) null,
+telefone varchar(20) null,
 constraint pk_pessoa primary key (codigo)
 );
 
 create table cliente (
 codigo int not null,
-rg char(15) not null,
+rg varchar(20) not null,
 dtnasc date null,
 constraint pk_cliente primary key (codigo),
 constraint fk_cliente_pessoa foreign key (codigo) references pessoa(codigo),
@@ -34,10 +34,10 @@ constraint fk_atendente_pessoa foreign key (codigo) references pessoa(codigo)
 
 create table livro (
 codigo int not null,
-titulo char(70) not null,
-autor char(100) not null,
+titulo varchar(150) not null,
+autor varchar(100) not null,
 preco decimal(10,2) not null,
-qtd_estoque int,
+qtd_estoque int not null default 0,
 constraint pk_livro primary key (codigo)
 );
 

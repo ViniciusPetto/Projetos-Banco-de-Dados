@@ -38,5 +38,29 @@ titulo char(70) not null,
 autor char(100) not null,
 preco decimal(10,2) not null,
 qtd_estoque int,
-constraint pk_livro primary key (codigo),
+constraint pk_livro primary key (codigo)
 );
+
+create table venda (
+codigo int not null,
+data date not null,
+cod_cli int not null,
+cod_aten int not null,
+constraint pk_venda primary key (codigo),
+constraint fk_venda_cliente foreign key (cod_cli) references cliente(codigo),
+constraint fk_venda_atendente foreign key (cod_aten) references atendente(codigo)
+);
+
+create index ix_venda_cod_cli on venda(cod_cli);
+create index ix_venda_cod_aten on venda(cod_aten);
+
+create table itemvenda (
+cod_venda int not null,
+cod_livro int not null,
+quantidade int not null,
+constraint pk_itemvenda primary key (cod_venda, cod_livro),
+constraint fk_itemvenda_venda foreign key (cod_venda) references venda(codigo),
+constraint fk_itemvenda_livro foreign key (cod_livro) references livro(codigo)
+);
+
+create index ix_itemvenda_cod_livro on itemvenda(cod_livro);

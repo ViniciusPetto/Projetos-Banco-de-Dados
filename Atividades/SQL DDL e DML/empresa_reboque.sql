@@ -48,5 +48,7 @@ CREATE TABLE ocorrencia (
 );
 
 CREATE INDEX idx_ocorrencia_motorista ON ocorrencia(cod_motorista);
+
+INSERT INTO motorista values (1, 'João da Silva', 123456, '14:30:06', '17:00:00')
 CREATE INDEX idx_ocorrencia_cliente ON ocorrencia(cod_cliente);
 CREATE INDEX idx_ocorrencia_veiculo ON ocorrencia(placa);

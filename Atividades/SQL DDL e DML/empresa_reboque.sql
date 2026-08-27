@@ -1,7 +1,9 @@
 USE master;
 GO
+    
 CREATE DATABASE EmpresaReboque;
 GO
+    
 USE EmpresaReboque;
 GO
 
@@ -49,6 +51,10 @@ CREATE TABLE ocorrencia (
 
 CREATE INDEX idx_ocorrencia_motorista ON ocorrencia(cod_motorista);
 
-INSERT INTO motorista values (1, 'João da Silva', 123456, '14:30:06', '17:00:00')
 CREATE INDEX idx_ocorrencia_cliente ON ocorrencia(cod_cliente);
+GO
+    
 CREATE INDEX idx_ocorrencia_veiculo ON ocorrencia(placa);
+GO
+
+INSERT INTO motorista values (1, 'João da Silva', 123456, '14:30:06', '17:00:00')

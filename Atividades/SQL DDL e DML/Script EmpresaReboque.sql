@@ -1,9 +1,10 @@
 USE master;
 GO
-    
+
+-- Criando base de dados da Empresa de Reboque e suas tabelas
 CREATE DATABASE EmpresaReboque;
 GO
-    
+
 USE EmpresaReboque;
 GO
 
@@ -57,4 +58,18 @@ GO
 CREATE INDEX idx_ocorrencia_veiculo ON ocorrencia(placa);
 GO
 
-INSERT INTO motorista values (1, 'João da Silva', 123456, '14:30:06', '17:00:00')
+
+-- CRUD no banco de dados
+-- A)
+INSERT INTO motorista VALUES (1, 'Joao da Silva', 123456, '06:00:00', '13:00:00');
+INSERT INTO motorista VALUES (5, 'Rogerio Nunes', 789101, '11:00:00', '17:30:00');
+
+-- B)
+INSERT INTO cliente VALUES (1, '123456789', 'Roberto Gomes', 'Rua das Flores, 197, Bairro Sao Joao, LImeira - SP');
+
+-- C)
+INSERT INTO veiculo VALUES ('ABC1D23', 'Volkswagen', 'Branco');
+INSERT INTO veiculo VALUES ('AAA5555', 'Chevrolet', 'Prata');
+
+-- F)
+UPDATE motorista SET hora_saida = '18:00:00' WHERE codigo = 5;

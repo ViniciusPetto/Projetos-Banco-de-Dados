@@ -70,6 +70,69 @@ INSERT INTO cliente VALUES (1, '123456789', 'Roberto Gomes', 'Rua das Flores, 19
 -- C)
 INSERT INTO veiculo VALUES ('ABC1D23', 'Volkswagen', 'Branco');
 INSERT INTO veiculo VALUES ('AAA5555', 'Chevrolet', 'Prata');
+-- D)
+INSERT INTO ocorrencia 
+(
+    codigo,
+    end_busca,
+    end_entrega,
+    data,
+    distancia,
+    preco,
+    pago,
+    cod_motorista,
+    cod_cliente,
+    placa
+)
+VALUES 
+(
+    10,
+    'Rua das Palmeiras, 100, Limeira - SP',
+    'Avenida Brasil, 500, Limeira - SP',
+    '2026-08-15',
+    12,
+    180.00,
+    'N',
+    1,
+    1,
+    'ABC1D23'
+);
+``
+-- E)
+
+UPDATE ocorrencia
+SET pago = 'S'
+WHERE codigo = 10;
 
 -- F)
+
 UPDATE motorista SET hora_saida = '18:00:00' WHERE codigo = 5;
+
+-- G)
+
+DELETE FROM ocorrencia
+WHERE data >= '2026-08-01'
+  AND data < '2026-09-01'
+  AND pago = 'S';
+
+-- H)
+
+DELETE FROM veiculo
+WHERE placa = 'AAA5555';
+
+-- I)
+
+SELECT *
+FROM motorista
+WHERE hora_entrada = '06:00:00'
+  AND hora_saida = '13:00:00';
+
+-- J)
+
+-- K)
+
+-- L)
+
+-- M)
+
+-- N)

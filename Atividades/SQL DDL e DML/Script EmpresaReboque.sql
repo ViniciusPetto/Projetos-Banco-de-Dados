@@ -97,7 +97,7 @@ VALUES
     1,
     'ABC1D23'
 );
-``
+
 -- E)
 
 UPDATE ocorrencia
@@ -129,10 +129,35 @@ WHERE hora_entrada = '06:00:00'
 
 -- J)
 
+SELECT COUNT(*) AS total_ocorrencias_pagas
+FROM ocorrencia
+WHERE pago = 'S';
+
 -- K)
+
+SELECT data, AVG(preco) AS media_preco
+FROM ocorrencia
+GROUP BY data;
 
 -- L)
 
+SELECT c.nome
+FROM ocorrencia o
+INNER JOIN cliente c ON o.cod_cliente = c.codigo
+WHERE o.pago = 'N';
+
 -- M)
 
+SELECT o.placa, m.nome, o.data, o.distancia
+FROM ocorrencia o
+INNER JOIN motorista m ON o.cod_motorista = m.codigo
+ORDER BY o.data;
+
 -- N)
+
+SELECT c.nome, m.nome, o.data, o.preco
+FROM ocorrencia o
+INNER JOIN cliente c ON o.cod_cliente = c.codigo
+INNER JOIN motorista m ON o.cod_motorista = m.codigo
+WHERE o.pago = 'N'
+ORDER BY o.data, c.nome;

@@ -40,7 +40,7 @@ CREATE TABLE ocorrencia (
     data           DATE          NOT NULL,
     distancia      INT           NOT NULL,
     preco          DECIMAL(10,2) NOT NULL,
-    pago           DECIMAL(10,2) NOT NULL,
+    pago CHAR(1) NOT NULL CHECK (pago IN ('S','N')),
     cod_motorista  INT           NOT NULL,
     cod_cliente    INT           NOT NULL,
     placa          CHAR(7)       NOT NULL,

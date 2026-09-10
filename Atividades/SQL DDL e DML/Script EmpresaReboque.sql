@@ -40,7 +40,7 @@ CREATE TABLE ocorrencia (
     data           DATE          NOT NULL,
     distancia      INT           NOT NULL,
     preco          DECIMAL(10,2) NOT NULL,
-    pago           DECIMAL(10,2) NOT NULL,
+    pago CHAR(1) NOT NULL CHECK (pago IN ('S','N')),
     cod_motorista  INT           NOT NULL,
     cod_cliente    INT           NOT NULL,
     placa          CHAR(7)       NOT NULL,
@@ -70,6 +70,94 @@ INSERT INTO cliente VALUES (1, '123456789', 'Roberto Gomes', 'Rua das Flores, 19
 -- C)
 INSERT INTO veiculo VALUES ('ABC1D23', 'Volkswagen', 'Branco');
 INSERT INTO veiculo VALUES ('AAA5555', 'Chevrolet', 'Prata');
+-- D)
+INSERT INTO ocorrencia 
+(
+    codigo,
+    end_busca,
+    end_entrega,
+    data,
+    distancia,
+    preco,
+    pago,
+    cod_motorista,
+    cod_cliente,
+    placa
+)
+VALUES 
+(
+    10,
+    'Rua das Palmeiras, 100, Limeira - SP',
+    'Avenida Brasil, 500, Limeira - SP',
+    '2026-08-15',
+    12,
+    180.00,
+    'N',
+    1,
+    1,
+    'ABC1D23'
+);
+
+-- E)
+
+UPDATE ocorrencia
+SET pago = 'S'
+WHERE codigo = 10;
 
 -- F)
+
 UPDATE motorista SET hora_saida = '18:00:00' WHERE codigo = 5;
+
+-- G)
+
+DELETE FROM ocorrencia
+WHERE data >= '2026-08-01'
+  AND data < '2026-09-01'
+  AND pago = 'S';
+
+-- H)
+
+DELETE FROM veiculo
+WHERE placa = 'AAA5555';
+
+-- I)
+
+SELECT *
+FROM motorista
+WHERE hora_entrada = '06:00:00'
+  AND hora_saida = '13:00:00';
+
+-- J)
+
+SELECT COUNT(*) AS total_ocorrencias_pagas
+FROM ocorrencia
+WHERE pago = 'S';
+
+-- K)
+
+SELECT data, AVG(preco) AS media_preco
+FROM ocorrencia
+GROUP BY data;
+
+-- L)
+
+SELECT c.nome
+FROM ocorrencia o
+INNER JOIN cliente c ON o.cod_cliente = c.codigo
+WHERE o.pago = 'N';
+
+-- M)
+
+SELECT o.placa, m.nome, o.data, o.distancia
+FROM ocorrencia o
+INNER JOIN motorista m ON o.cod_motorista = m.codigo
+ORDER BY o.data;
+
+-- N)
+
+SELECT c.nome, m.nome, o.data, o.preco
+FROM ocorrencia o
+INNER JOIN cliente c ON o.cod_cliente = c.codigo
+INNER JOIN motorista m ON o.cod_motorista = m.codigo
+WHERE o.pago = 'N'
+ORDER BY o.data, c.nome;

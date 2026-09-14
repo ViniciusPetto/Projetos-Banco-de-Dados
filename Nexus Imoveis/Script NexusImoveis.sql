@@ -2,6 +2,7 @@
 GO
 
 if exists (select name from sys.databases where name = 'NexusImoveis')
+	alter database NexusImoveis set single_user with rollback immediate;
     drop database NexusImoveis;
 GO
 
@@ -17,12 +18,8 @@ create table pessoa (
 	id_pessoa int identity not null,
 	email varchar(100) null,
 	telefone char(14) not null,
-	rua varchar(100) not null,
-	numero varchar(10) not null,
-	bairro varchar(50) not null,
-	CEP char(8) not null,
-	cidade varchar(50) not null,
-	estado char(2) not null,
+	endereco varchar(200) not null,
+	tipo char(8) not null,
 
 	constraint pk_pessoa primary key (id_pessoa)
 );
@@ -61,9 +58,10 @@ create table funcionario(
 	data_demissao date null,
 	status_ativo bit not null,
 	salario numeric(10,2) not null,
+	tipo char(8) not null,
 
 	constraint pk_funcionario primary key (id_pessoa),
-	constraint fk_funcionario foreign key (id_pessoa) references pessoa(id_pessoa) on delete cascade
+	constraint fk_funcionario_pessoa foreign key (id_pessoa) references pessoa(id_pessoa) on delete cascade
 );
 
 create table vistoriador(
@@ -73,8 +71,7 @@ create table vistoriador(
 	disponibilidade bit not null,
 
 	constraint pk_vistoriador primary key (id_pessoa),
-	constraint fk_vistoriador foreign key (id_pessoa) references funcionario(id_pessoa) on delete cascade,
-	constraint uq_vistoriador unique (numero_registro_tecnico)
+	constraint fk_vistoriador_funcionario foreign key (id_pessoa) references funcionario(id_pessoa) on delete cascade
 );
 
 create table agente(
@@ -84,8 +81,7 @@ create table agente(
 	regiao_atuacao varchar(50) not null,
 
 	constraint pk_agente primary key(id_pessoa),
-	constraint fk_agente foreign key (id_pessoa) references funcionario(id_pessoa) on delete cascade,
-	constraint uq_agente unique (numero_CRECI)
+	constraint fk_agente_funcionario foreign key (id_pessoa) references funcionario(id_pessoa) on delete cascade,
 );
 
 create table cliente(
@@ -95,7 +91,7 @@ create table cliente(
 	status_conta bit not null,
 
 	constraint pk_cliente primary key(id_pessoa),
-	constraint fk_cliente foreign key (id_pessoa) references pessoa(id_pessoa) on delete cascade
+	constraint fk_cliente_pessoa foreign key (id_pessoa) references pessoa(id_pessoa) on delete cascade
 );
 
 create table proprietario(
@@ -194,4 +190,10 @@ create index idx_imovel_valor_aluguel on imovel(valor_aluguel);
 create index idx_vistoria_data on vistoria(data_vistoria);
 create index idx_contrato_data_inicio on contrato(data_inicio);
 
+create index idx_imovel_proprietario on imovel(id_pessoa);
+create index idx_vistoria_imovel on vistoria(id_imovel);
+create index idx_vistoria_vistoriador on vistoria(id_pessoa);
+create index idx_reparo_vistoria on reparo(id_vistoria);
+create index idx_contrato_locatario on contrato(id_pessoa);
+create index idx_contrato_imovel on contrato(id_imovel);
 GO

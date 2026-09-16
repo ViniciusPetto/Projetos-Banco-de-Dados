@@ -196,4 +196,5 @@ create index idx_vistoria_vistoriador on vistoria(id_pessoa);
 create index idx_reparo_vistoria on reparo(id_vistoria);
 create index idx_contrato_locatario on contrato(id_pessoa);
 create index idx_contrato_imovel on contrato(id_imovel);
+create index idx_vistoriador_disponibilidade on vistoriador (disponibilidade);
 GO

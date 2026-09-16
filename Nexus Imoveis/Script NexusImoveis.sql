@@ -29,7 +29,7 @@ create table pessoa_fisica (
 	CPF char(11) not null,
 	nome varchar(100) not null,
 	data_nasc date not null,
-	estado_civil varchar(15) not null,
+	estado_civil char(15) not null,
 	nacionalidade varchar(30) not null,
 
 	constraint pk_pessoa_fisica primary key (id_pessoa),
@@ -98,7 +98,7 @@ create table proprietario(
 	id_pessoa int not null,
 	preferencia_contato varchar(20) not null,
 	dados_bancarios_agencia char(6) not null,
-	dados_bancarios_conta varchar(15) not null,
+	dados_bancarios_conta char(15) not null,
 
 	constraint pk_proprietario primary key(id_pessoa),
 	constraint fk_proprietario_cliente foreign key (id_pessoa) references cliente(id_pessoa) on delete cascade
@@ -123,7 +123,7 @@ create table imovel(
 	num_matricula varchar(50) not null,
 	valor_aluguel numeric(10,2) not null,
 	area_m2 numeric(10,2) not null,
-	status_anuncio varchar(20) not null,
+	status_anuncio char(20) not null,
 
 	constraint pk_imovel primary key(id_imovel),
 	constraint fk_imovel_proprietario foreign key (id_pessoa) references proprietario(id_pessoa)
@@ -146,8 +146,8 @@ create table reparo(
 	num_reparo int identity not null,
 	id_vistoria int not null,
 	data_reparo date not null,
-	status_notificacao varchar(20) not null,
-	responsabilidade_financeira varchar(12) not null,
+	status_notificacao char(20) not null,
+	responsabilidade_financeira char(12) not null,
 	descricao_necessidade varchar(500) not null,
 
 	constraint pk_reparo primary key(num_reparo),

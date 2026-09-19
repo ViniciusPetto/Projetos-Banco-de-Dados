@@ -1,6 +1,8 @@
-﻿use master;
+use master;
 GO
 
+-- Força usuário único para desconexão do banco de dados e realiza o drop database
+	
 if exists (select name from sys.databases where name = 'NexusImoveis')
 	alter database NexusImoveis set single_user with rollback immediate;
     drop database NexusImoveis;
@@ -12,7 +14,7 @@ GO
 use NexusImoveis;
 GO
 
--- Tables
+-- Tables and Indexes
 
 create table pessoa (
 	id_pessoa int identity not null,
@@ -20,9 +22,11 @@ create table pessoa (
 	telefone char(14) not null,
 	endereco varchar(200) not null,
 	tipo char(8) not null,
-
-	constraint pk_pessoa primary key (id_pessoa)
+	
+	constraint pk_pessoa primary key (id_pessoa),
+	constraint uq_pessoa_email unique (email)
 );
+GO
 
 create table pessoa_fisica (
 	id_pessoa int not null,
@@ -36,6 +40,8 @@ create table pessoa_fisica (
 	constraint fk_pessoa_fisica_pessoa foreign key (id_pessoa) references pessoa(id_pessoa) on delete cascade,
 	constraint uq_pessoa_fisica unique (CPF)
 );
+create index idx_pessoa_fisica_nome on pessoa_fisica(nome);
+GO
 
 create table pessoa_juridica (
 	id_pessoa int not null,
@@ -51,6 +57,7 @@ create table pessoa_juridica (
 	constraint fk_pessoa_juridica_pessoa foreign key (id_pessoa) references pessoa(id_pessoa) on delete cascade,
 	constraint uq_pessoa_juridica unique (CNPJ)
 );
+GO
 
 create table funcionario(
 	id_pessoa int not null,
@@ -63,6 +70,7 @@ create table funcionario(
 	constraint pk_funcionario primary key (id_pessoa),
 	constraint fk_funcionario_pessoa foreign key (id_pessoa) references pessoa(id_pessoa) on delete cascade
 );
+GO
 
 create table vistoriador(
 	id_pessoa int not null,
@@ -73,7 +81,9 @@ create table vistoriador(
 	constraint pk_vistoriador primary key (id_pessoa),
 	constraint fk_vistoriador_funcionario foreign key (id_pessoa) references funcionario(id_pessoa) on delete cascade
 );
-
+create index idx_vistoriador_disponibilidade on vistoriador(disponibilidade);
+GO
+	
 create table agente(
 	id_pessoa int not null,
 	numero_CRECI varchar(20) not null,
@@ -83,6 +93,7 @@ create table agente(
 	constraint pk_agente primary key(id_pessoa),
 	constraint fk_agente_funcionario foreign key (id_pessoa) references funcionario(id_pessoa) on delete cascade,
 );
+GO
 
 create table cliente(
 	id_pessoa int not null,
@@ -93,6 +104,7 @@ create table cliente(
 	constraint pk_cliente primary key(id_pessoa),
 	constraint fk_cliente_pessoa foreign key (id_pessoa) references pessoa(id_pessoa) on delete cascade
 );
+GO
 
 create table proprietario(
 	id_pessoa int not null,
@@ -103,6 +115,7 @@ create table proprietario(
 	constraint pk_proprietario primary key(id_pessoa),
 	constraint fk_proprietario_cliente foreign key (id_pessoa) references cliente(id_pessoa) on delete cascade
 );
+GO
 
 create table locatario(
 	id_pessoa int not null,
@@ -112,6 +125,7 @@ create table locatario(
 	constraint pk_locatario primary key(id_pessoa),
 	constraint fk_locatario_cliente foreign key (id_pessoa) references cliente(id_pessoa) on delete cascade
 );
+GO
 
 create table imovel(
 	id_imovel int identity not null,
@@ -128,12 +142,16 @@ create table imovel(
 	constraint pk_imovel primary key(id_imovel),
 	constraint fk_imovel_proprietario foreign key (id_pessoa) references proprietario(id_pessoa)
 );
+create index idx_imovel_proprietario on imovel(id_pessoa);
+create index idx_imovel_status_anuncio on imovel(status_anuncio);
+create index idx_imovel_valor_aluguel on imovel(valor_aluguel);
+GO
 
 create table vistoria(
 	id_vistoria int identity not null,
 	id_imovel int not null,
 	id_pessoa int not null,
-	tipo char(7) not null, -- Entrada ou Saida
+	tipo char(7) not null,
 	descricao_estado_conservacao varchar(500) null,
 	data_vistoria date not null,
 
@@ -141,6 +159,10 @@ create table vistoria(
 	constraint fk_vistoria_imovel foreign key (id_imovel) references imovel(id_imovel),
 	constraint fk_vistoria_vistoriador foreign key (id_pessoa) references vistoriador(id_pessoa)
 );
+create index idx_vistoria_imovel on vistoria(id_imovel);
+create index idx_vistoria_vistoriador on vistoria(id_pessoa);
+create index idx_vistoria_data on vistoria(data_vistoria);
+GO
 
 create table reparo(
 	num_reparo int identity not null,
@@ -153,6 +175,8 @@ create table reparo(
 	constraint pk_reparo primary key(num_reparo),
 	constraint fk_reparo_vistoria foreign key (id_vistoria) references vistoria(id_vistoria)
 );
+create index idx_reparo_vistoria on reparo(id_vistoria);
+GO
 
 create table contrato(
 	id_contrato int identity not null,
@@ -169,6 +193,10 @@ create table contrato(
 	constraint fk_contrato_locatario foreign key (id_pessoa) references locatario(id_pessoa),
 	constraint fk_contrato_imovel foreign key (id_imovel) references imovel(id_imovel)
 );
+create index idx_contrato_locatario on contrato(id_pessoa);
+create index idx_contrato_imovel on contrato(id_imovel);
+create index idx_contrato_data_inicio on contrato(data_inicio);
+GO
 
 create table agendamento(
 	id_agente int not null,
@@ -176,25 +204,10 @@ create table agendamento(
 	data_visita date not null,
 	hora_visita time not null,
 
-	constraint pk_agendamento primary key(id_agente, id_locatario, data_visita, hora_visita),
+	constraint pk_agendamento primary key(id_agente, id_locatario),
 	constraint fk_agendamento_agente foreign key (id_agente) references agente(id_pessoa),
 	constraint fk_agendamento_locatario foreign key (id_locatario) references locatario(id_pessoa)
 );
-
--- Indexes
-
-create index idx_pessoa_email on pessoa(email);
-create index idx_pessoa_fisica_nome on pessoa_fisica(nome);
-create index idx_imovel_status_anuncio on imovel(status_anuncio);
-create index idx_imovel_valor_aluguel on imovel(valor_aluguel);
-create index idx_vistoria_data on vistoria(data_vistoria);
-create index idx_contrato_data_inicio on contrato(data_inicio);
-
-create index idx_imovel_proprietario on imovel(id_pessoa);
-create index idx_vistoria_imovel on vistoria(id_imovel);
-create index idx_vistoria_vistoriador on vistoria(id_pessoa);
-create index idx_reparo_vistoria on reparo(id_vistoria);
-create index idx_contrato_locatario on contrato(id_pessoa);
-create index idx_contrato_imovel on contrato(id_imovel);
-create index idx_vistoriador_disponibilidade on vistoriador (disponibilidade);
+create index idx_agendamento_locatario on agendamento(id_locatario);
+create index idx_agendamento_data on agendamento(data_visita);
 GO

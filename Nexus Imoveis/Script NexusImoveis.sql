@@ -2,7 +2,7 @@ use master;
 GO
 
 -- Força usuário único para desconexão do banco de dados e realiza o drop database
-	
+
 if exists (select name from sys.databases where name = 'NexusImoveis')
 	alter database NexusImoveis set single_user with rollback immediate;
     drop database NexusImoveis;
@@ -22,7 +22,7 @@ create table pessoa (
 	telefone char(14) not null,
 	endereco varchar(200) not null,
 	tipo char(8) not null,
-	
+
 	constraint pk_pessoa primary key (id_pessoa),
 	constraint uq_pessoa_email unique (email)
 );
@@ -83,7 +83,7 @@ create table vistoriador(
 );
 create index idx_vistoriador_disponibilidade on vistoriador(disponibilidade);
 GO
-	
+
 create table agente(
 	id_pessoa int not null,
 	numero_CRECI varchar(20) not null,
@@ -127,57 +127,6 @@ create table locatario(
 );
 GO
 
-create table imovel(
-	id_imovel int identity not null,
-	id_pessoa int not null,
-	endereco varchar(200) not null,
-	descricao varchar(500) null,
-	foto varchar(255) null,
-	status_aptidao bit not null,
-	num_matricula varchar(50) not null,
-	valor_aluguel numeric(10,2) not null,
-	area_m2 numeric(10,2) not null,
-	status_anuncio char(20) not null,
-
-	constraint pk_imovel primary key(id_imovel),
-	constraint fk_imovel_proprietario foreign key (id_pessoa) references proprietario(id_pessoa)
-);
-create index idx_imovel_proprietario on imovel(id_pessoa);
-create index idx_imovel_status_anuncio on imovel(status_anuncio);
-create index idx_imovel_valor_aluguel on imovel(valor_aluguel);
-GO
-
-create table vistoria(
-	id_vistoria int identity not null,
-	id_imovel int not null,
-	id_pessoa int not null,
-	tipo char(7) not null,
-	descricao_estado_conservacao varchar(500) null,
-	data_vistoria date not null,
-
-	constraint pk_vistoria primary key(id_vistoria),
-	constraint fk_vistoria_imovel foreign key (id_imovel) references imovel(id_imovel),
-	constraint fk_vistoria_vistoriador foreign key (id_pessoa) references vistoriador(id_pessoa)
-);
-create index idx_vistoria_imovel on vistoria(id_imovel);
-create index idx_vistoria_vistoriador on vistoria(id_pessoa);
-create index idx_vistoria_data on vistoria(data_vistoria);
-GO
-
-create table reparo(
-	num_reparo int identity not null,
-	id_vistoria int not null,
-	data_reparo date not null,
-	status_notificacao char(20) not null,
-	responsabilidade_financeira char(12) not null,
-	descricao_necessidade varchar(500) not null,
-
-	constraint pk_reparo primary key(num_reparo),
-	constraint fk_reparo_vistoria foreign key (id_vistoria) references vistoria(id_vistoria)
-);
-create index idx_reparo_vistoria on reparo(id_vistoria);
-GO
-
 create table contrato(
 	id_contrato int identity not null,
 	id_pessoa int not null,
@@ -198,6 +147,40 @@ create index idx_contrato_imovel on contrato(id_imovel);
 create index idx_contrato_data_inicio on contrato(data_inicio);
 GO
 
+create table imovel(
+	id_imovel int identity not null,
+	id_pessoa int not null,
+	endereco varchar(200) not null,
+	descricao varchar(500) null,
+	foto varchar(255) null,
+	status_aptidao bit not null,
+	num_matricula varchar(50) not null,
+	valor_aluguel numeric(10,2) not null,
+	area_m2 numeric(10,2) not null,
+	status_anuncio char(20) not null,
+
+	constraint pk_imovel primary key(id_imovel),
+	constraint fk_imovel_proprietario foreign key (id_pessoa) references proprietario(id_pessoa)
+);
+create index idx_imovel_proprietario on imovel(id_pessoa);
+create index idx_imovel_status_anuncio on imovel(status_anuncio);
+create index idx_imovel_valor_aluguel on imovel(valor_aluguel);
+GO
+
+create table reparo(
+	num_reparo int identity not null,
+	id_vistoria int not null,
+	data_reparo date not null,
+	status_notificacao char(20) not null,
+	responsabilidade_financeira char(12) not null,
+	descricao_necessidade varchar(500) not null,
+
+	constraint pk_reparo primary key(id_vistoria, num_reparo),
+	constraint fk_reparo_vistoria foreign key (id_vistoria) references vistoria(id_vistoria),
+	constraint uq_reparo unique (num_reparo)
+);
+GO
+
 create table agendamento(
 	id_agente int not null,
 	id_locatario int not null,
@@ -210,4 +193,21 @@ create table agendamento(
 );
 create index idx_agendamento_locatario on agendamento(id_locatario);
 create index idx_agendamento_data on agendamento(data_visita);
+GO
+
+create table vistoria(
+	id_vistoria int identity not null,
+	id_imovel int not null,
+	id_pessoa int not null,
+	tipo char(7) not null,
+	descricao_estado_conservacao varchar(500) null,
+	data_vistoria date not null,
+
+	constraint pk_vistoria primary key(id_vistoria),
+	constraint fk_vistoria_imovel foreign key (id_imovel) references imovel(id_imovel),
+	constraint fk_vistoria_vistoriador foreign key (id_pessoa) references vistoriador(id_pessoa)
+);
+create index idx_vistoria_imovel on vistoria(id_imovel);
+create index idx_vistoria_vistoriador on vistoria(id_pessoa);
+create index idx_vistoria_data on vistoria(data_vistoria);
 GO

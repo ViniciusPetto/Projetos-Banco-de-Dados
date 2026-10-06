@@ -122,3 +122,48 @@ begin transaction
         rollback transaction
 
 -- (c) Cadastro de venda
+            
+-- Insercao de dois livro
+insert into livro
+values (1, 'Codigo Limpo: Habilidades Praticas do Agile Software', 'Robert C. Martin', 75.00, 3);
+
+insert into livro
+values (2, 'Programacao Utilizando IA', 'Tom Taulli', 60.00, 5);
+
+
+-- Criacao da transacao de cadastro de venda
+begin transaction
+    insert into venda
+    values (1, '06-10-2026', 1, 2)
+    if @@ROWCOUNT > 0
+    begin
+        insert into itemvenda
+        values (1, 1, 2)
+        if @@ROWCOUNT > 0
+        begin
+            update livro set qtd_estoque = qtd_estoque - 2 where codigo = 1
+            if @@ROWCOUNT > 0
+            begin
+                insert into itemvenda
+                values (1, 2, 3)
+                if @@ROWCOUNT > 0
+                begin
+                    update livro set qtd_estoque = qtd_estoque - 3 where codigo = 2
+                    if @@ROWCOUNT > 0
+                    begin
+                        commit transaction
+                    end
+                    else
+                        rollback transaction
+                end
+                else
+                    rollback transaction
+            end
+            else
+                rollback transaction
+        end
+        else
+            rollback transaction
+    end
+    else
+        rollback transaction

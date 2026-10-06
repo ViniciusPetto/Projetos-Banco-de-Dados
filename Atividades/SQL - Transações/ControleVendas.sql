@@ -89,7 +89,7 @@ GO
 
 -- Transacoes
 
---(a) Cadastrar cliente
+-- (a) Cadastrar cliente
 begin transaction
     insert into pessoa
     values (1, 'Jose da Silva Junior', 'Rua das Flores, 199', '11988887777')
@@ -105,7 +105,7 @@ begin transaction
     else
         rollback transaction
 
---(b) Cadastrar atendente
+-- (b) Cadastrar atendente
 begin transaction
     insert into pessoa
     values (2, 'Laura Cardoso', 'Rua Ipanema, 301', '11977778888')
@@ -121,4 +121,4 @@ begin transaction
     else
         rollback transaction
 
---(c) Cadastro de venda
+-- (c) Cadastro de venda

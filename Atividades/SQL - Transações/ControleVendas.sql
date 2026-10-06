@@ -1,3 +1,4 @@
+-- Modelo fisico do banco de dados
 use master;
 GO
 
@@ -25,7 +26,7 @@ GO
 
 create table cliente(
     codigo int      not null,
-    rg     char(20) not null,
+    rg     char(12) not null,
     dtnasc date     not null,
     constraint pk_cliente primary key (codigo),
     constraint fk_cliente_pessoa foreign key (codigo) references pessoa(codigo)
@@ -85,3 +86,39 @@ GO
 
 create index ix_itemvenda_cod_livro on itemvenda(cod_livro);
 GO
+
+-- Transacoes
+
+--(a) Cadastrar cliente
+begin transaction
+    insert into pessoa
+    values (1, 'Jose da Silva Junior', 'Rua das Flores, 199', '11988887777')
+    if @@ROWCOUNT > 0
+    begin
+        insert into cliente
+        values (1, '123456789', '1975-07-12');
+        if @@ROWCOUNT > 0
+            commit transaction
+        else
+            rollback transaction
+    end
+    else
+        rollback transaction
+
+--(b) Cadastrar atendente
+begin transaction
+    insert into pessoa
+    values (2, 'Laura Cardoso', 'Rua Ipanema, 301', '11977778888')
+    if @@ROWCOUNT > 0
+    begin
+        insert into atendente
+        values (2, 2700.00, 10.00);
+        if @@ROWCOUNT > 0
+            commit transaction
+        else
+            rollback transaction
+    end
+    else
+        rollback transaction
+
+--(c) Cadastro de venda

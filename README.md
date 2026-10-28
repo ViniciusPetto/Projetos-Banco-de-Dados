@@ -6,7 +6,7 @@ Repositório criado para armazenamento de projetos de banco de dados criados na 
 - ✅ Deve existir atributo tipo na relação Pessoa Física <-> Pessoa Jurídica e em relação à Funcionário;
 - ✅ Na entidade Agendamento, não existe o atributo ID_agendamento, com o ideal sendo ID_locatario e ID_agente sendo PK ao mesmo tempo;
 - ✅ Colocar os índices junto das respectivas entidades;
-- Revisar os índices existentes, existem muitos. Ideal é ter apenas para campos chave das tabelas;
+- ✅ Revisar os índices existentes, existem muitos. Ideal é ter apenas para campos chave das tabelas;
 - ✅ Ideal deixar chave composta na entidade Reparo: num_reparo e ID_vistoria.
 
 # Nexus Imóveis (dicas):

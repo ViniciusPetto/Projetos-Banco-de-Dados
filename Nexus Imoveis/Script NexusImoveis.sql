@@ -24,7 +24,8 @@ create table pessoa (
 	tipo char(8) not null,
 
 	constraint pk_pessoa primary key (id_pessoa),
-	constraint uq_pessoa_email unique (email)
+	constraint uq_pessoa_email unique (email),
+	constraint ck_tipo check (tipo in ('FISICA', 'JURIDICA'))
 );
 GO
 
@@ -208,3 +209,82 @@ create table agendamento(
 create index idx_agendamento_locatario on agendamento(id_locatario);
 create index idx_agendamento_data on agendamento(data_visita);
 GO
+
+-- Views
+
+-- Procedures
+--Cadastro de pessoa fisica
+create procedure cadastrar_pessoa_fisica
+@email varchar(100),
+@telefone char(14),
+@endereco varchar(200),
+@CPF char(11),
+@nome varchar(100),
+@data_nasc date,
+@estado_civil char(15),
+@nacionalidade varchar(30)
+as
+begin transaction
+declare @id int
+declare @tipo char(8) = 'FISICA'
+insert into pessoa values (@email, @telefone, @endereco, @tipo)
+if @@ROWCOUNT > 0
+begin
+	set @id = SCOPE_IDENTITY()
+	insert into pessoa_fisica values (@id, @CPF, @nome, @data_nasc, @estado_civil, @nacionalidade)
+	if @@ROWCOUNT > 0
+	begin
+		commit transaction
+		return 1
+	end
+	else
+	begin
+		rollback transaction
+		return 0
+	end
+end
+else
+begin
+	rollback transaction
+	return 0
+end
+
+-- Cadastro de pessoa juridica
+create procedure cadastrar_pessoa_juridica
+@email varchar(100),
+@telefone char(14),
+@endereco varchar(200),
+@CNPJ char(14),
+@nome_fantasia varchar(100),
+@razao_social varchar(100),
+@data_abertura date,
+@inscricao_estadual char(14),
+@porte varchar(20),
+@status varchar(10)
+as
+begin transaction
+declare @id int
+declare @tipo char(8) = 'JURIDICA'
+insert into pessoa values (@email, @telefone, @endereco, @tipo)
+if @@ROWCOUNT > 0
+begin
+	set @id = SCOPE_IDENTITY()
+	insert into pessoa_juridica values (@id, @CNPJ, @nome_fantasia, @razao_social, @data_abertura, @inscricao_estadual, @porte, @status)
+	if @@ROWCOUNT > 0
+	begin
+		commit transaction
+		return 1
+	end
+	else
+	begin
+		rollback transaction
+		return 0
+	end
+end
+else
+begin
+	rollback transaction
+	return 0
+end
+
+-- Triggers

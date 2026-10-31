@@ -215,76 +215,75 @@ GO
 -- Procedures
 --Cadastro de pessoa fisica
 create procedure cadastrar_pessoa_fisica
-@email varchar(100),
-@telefone char(14),
-@endereco varchar(200),
-@CPF char(11),
-@nome varchar(100),
-@data_nasc date,
-@estado_civil char(15),
-@nacionalidade varchar(30)
+	@email varchar(100),
+	@telefone char(14),
+	@endereco varchar(200),
+	@CPF char(11),
+	@nome varchar(100),
+	@data_nasc date,
+	@estado_civil char(15),
+	@nacionalidade varchar(30)
 as
-begin transaction
-declare @id int
-declare @tipo char(8) = 'FISICA'
-insert into pessoa values (@email, @telefone, @endereco, @tipo)
-if @@ROWCOUNT > 0
 begin
-	set @id = SCOPE_IDENTITY()
-	insert into pessoa_fisica values (@id, @CPF, @nome, @data_nasc, @estado_civil, @nacionalidade)
-	if @@ROWCOUNT > 0
-	begin
-		commit transaction
-		return 1
-	end
-	else
-	begin
-		rollback transaction
-		return 0
-	end
+	declare @id int;
+
+	begin try
+		begin transaction;
+
+		insert into pessoa (email, telefone, endereco, tipo)
+		values (@email, @telefone, @endereco, 'FISICA');
+
+		set @id = SCOPE_IDENTITY();
+
+		insert into pessoa_fisica (id_pessoa, CPF, nome, data_nasc, estado_civil, nacionalidade)
+		values (@id, @CPF, @nome, @data_nasc, @estado_civil, @nacionalidade);
+
+		commit transaction;
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+		throw;
+	end catch
 end
-else
-begin
-	rollback transaction
-	return 0
-end
+GO
 
 -- Cadastro de pessoa juridica
 create procedure cadastrar_pessoa_juridica
-@email varchar(100),
-@telefone char(14),
-@endereco varchar(200),
-@CNPJ char(14),
-@nome_fantasia varchar(100),
-@razao_social varchar(100),
-@data_abertura date,
-@inscricao_estadual char(14),
-@porte varchar(20),
-@status varchar(10)
+	@email varchar(100),
+	@telefone char(14),
+	@endereco varchar(200),
+	@CNPJ char(14),
+	@nome_fantasia varchar(100),
+	@razao_social varchar(100),
+	@data_abertura date,
+	@inscricao_estadual char(14),
+	@porte varchar(20),
+	@status varchar(10)
 as
-begin transaction
-declare @id int
-declare @tipo char(8) = 'JURIDICA'
-insert into pessoa values (@email, @telefone, @endereco, @tipo)
-if @@ROWCOUNT > 0
 begin
-	set @id = SCOPE_IDENTITY()
-	insert into pessoa_juridica values (@id, @CNPJ, @nome_fantasia, @razao_social, @data_abertura, @inscricao_estadual, @porte, @status)
-	if @@ROWCOUNT > 0
-	begin
-		commit transaction
-		return 1
-	end
-	else
-	begin
-		rollback transaction
-		return 0
-	end
-end
-else
-begin
-	rollback transaction
-	return 0
-end
+	declare @id int;
 
+	begin try
+		begin transaction;
+
+		insert into pessoa (email, telefone, endereco, tipo)
+		values (@email, @telefone, @endereco, 'JURIDICA');
+
+		set @id = SCOPE_IDENTITY();
+
+		insert into pessoa_juridica (id_pessoa, CNPJ, nome_fantasia, razao_social, data_abertura, inscricao_estadual, porte, status)
+		values (@id, @CNPJ, @nome_fantasia, @razao_social, @data_abertura, @inscricao_estadual, @porte, @status);
+
+		commit transaction;
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+		throw;
+	end catch
+end
+GO
 -- Triggers

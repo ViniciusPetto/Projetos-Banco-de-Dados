@@ -81,7 +81,6 @@ create table vistoriador(
 	constraint pk_vistoriador primary key (id_pessoa),
 	constraint fk_vistoriador_funcionario foreign key (id_pessoa) references funcionario(id_pessoa) on delete cascade
 );
-create index idx_vistoriador_disponibilidade on vistoriador(disponibilidade);
 GO
 
 create table agente(
@@ -91,7 +90,7 @@ create table agente(
 	regiao_atuacao varchar(50) not null,
 
 	constraint pk_agente primary key(id_pessoa),
-	constraint fk_agente_funcionario foreign key (id_pessoa) references funcionario(id_pessoa) on delete cascade,
+	constraint fk_agente_funcionario foreign key (id_pessoa) references funcionario(id_pessoa) on delete cascade
 );
 GO
 
@@ -143,7 +142,6 @@ create table imovel(
 	constraint fk_imovel_proprietario foreign key (id_pessoa) references proprietario(id_pessoa)
 );
 create index idx_imovel_proprietario on imovel(id_pessoa);
-create index idx_imovel_status_anuncio on imovel(status_anuncio);
 create index idx_imovel_valor_aluguel on imovel(valor_aluguel);
 GO
 
@@ -181,7 +179,6 @@ create table vistoria(
 );
 create index idx_vistoria_imovel on vistoria(id_imovel);
 create index idx_vistoria_vistoriador on vistoria(id_pessoa);
-create index idx_vistoria_data on vistoria(data_vistoria);
 GO
 
 create table reparo(

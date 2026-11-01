@@ -204,7 +204,8 @@ create table agendamento(
 	data_visita date not null,
 	hora_visita time not null,
 
-	constraint pk_agendamento primary key(id_agente, id_locatario),
+	constraint pk_agendamento primary key(id_agente, data_visita, hora_visita),
+	constraint uq_agendamento_locatario unique (id_locatario, data_visita, hora_visita),
 	constraint fk_agendamento_agente foreign key (id_agente) references agente(id_pessoa),
 	constraint fk_agendamento_locatario foreign key (id_locatario) references locatario(id_pessoa)
 );
@@ -663,87 +664,6 @@ begin
 end
 GO
 
--- Agendamento de visita: valida agente ativo, locatário e conflitos de horário
-create procedure agendar_visita
-	@id_agente int,
-	@id_locatario int,
-	@data_visita date,
-	@hora_visita time
-as
-begin
-	declare @status_agente bit;
-
-	begin try
-		begin transaction;
-
-		select @status_agente = f.status_ativo
-		from agente a
-		join funcionario f on f.id_pessoa = a.id_pessoa
-		where a.id_pessoa = @id_agente;
-
-		if @status_agente is null
-			throw 50016, 'Agente não encontrado', 1;
-
-		if @status_agente = 0
-			throw 50018, 'Agente inativo', 1;
-
-		if not exists (select 1 from locatario where id_pessoa = @id_locatario)
-			throw 50017, 'Locatário não encontrado', 1;
-
-		if exists (select 1 from agendamento with (updlock, holdlock)
-				where id_agente = @id_agente and data_visita = @data_visita and hora_visita = @hora_visita)
-			throw 50019, 'Agente já tem visita neste horário', 1;
-
-		if exists (select 1 from agendamento with (updlock, holdlock)
-				where id_locatario = @id_locatario and data_visita = @data_visita and hora_visita = @hora_visita)
-			throw 50020, 'Locatário já tem visita neste horário', 1;
-
-		insert into agendamento (id_agente, id_locatario, data_visita, hora_visita)
-		values (@id_agente, @id_locatario, @data_visita, @hora_visita);
-
-		commit transaction;
-		return 1;
-	end try
-	begin catch
-		if @@TRANCOUNT > 0
-			rollback transaction;
-		throw;
-	end catch
-end
-GO
-
--- Atualização de disponibilidade do vistoriador: só libera se não há vistorias agendadas para o futuro
-create procedure atualizar_disponibilidade_vistoriador
-	@id_vistoriador int,
-	@disponibilidade bit
-as
-begin
-	begin try
-		begin transaction;
-
-		if not exists (select 1 from vistoriador where id_pessoa = @id_vistoriador)
-			throw 50012, 'Vistoriador não encontrado', 1;
-
-		if @disponibilidade = 1 and exists (
-			select 1 from vistoria
-			where id_pessoa = @id_vistoriador and data_vistoria > CAST(GETDATE() AS date))
-			throw 50021, 'Vistoriador tem vistorias agendadas para o futuro', 1;
-
-		update vistoriador
-		set disponibilidade = @disponibilidade
-		where id_pessoa = @id_vistoriador;
-
-		commit transaction;
-		return 1;
-	end try
-	begin catch
-		if @@TRANCOUNT > 0
-			rollback transaction;
-		throw;
-	end catch
-end
-GO
-
 -- Exclusão de pessoa: bloqueia se houver registros dependentes (o histórico não é apagado)
 create procedure excluir_pessoa
 	@id_pessoa int
@@ -781,3 +701,57 @@ begin
 end
 GO
 -- Triggers
+-- Liberação do vistoriador: não permite ficar disponível com vistorias agendadas para o futuro
+create trigger validar_liberacao_vistoriador
+on vistoriador
+after update
+as
+begin
+	if exists (
+		select 1
+		from inserted i
+		join deleted d on d.id_pessoa = i.id_pessoa
+		where d.disponibilidade = 0 and i.disponibilidade = 1
+		and exists (
+			select 1
+			from vistoria v
+			where v.id_pessoa = i.id_pessoa and v.data_vistoria > CAST(GETDATE() AS date)))
+		throw 50021, 'Vistoriador tem vistorias agendadas para os próximos dias', 1;
+end
+GO
+
+-- Vínculo do agente: impede agendamento de agente sem vínculo ativo com a empresa (conflitos de horário são garantidos pela PK e pela UNIQUE)
+create trigger validar_vinculo_agente
+on agendamento
+after insert
+as
+begin
+	if exists (
+		select 1
+		from inserted i
+		join funcionario f on f.id_pessoa = i.id_agente
+		where f.status_ativo = 0)
+		throw 50018, 'Agente sem vínculo ativo com a empresa', 1;
+end
+GO
+-- Validação de formato do CPF: vale para qualquer INSERT ou UPDATE em pessoa_fisica
+create trigger validar_formato_cpf
+on pessoa_fisica
+after insert, update
+as
+begin
+	if exists (select 1 from inserted where CPF like '%[^0-9]%')
+		throw 50027, 'CPF deve conter exatamente 11 dígitos numéricos', 1;
+end
+GO
+
+-- Validação de formato do CNPJ: vale para qualquer INSERT ou UPDATE em pessoa_juridica
+create trigger validar_formato_cnpj
+on pessoa_juridica
+after insert, update
+as
+begin
+	if exists (select 1 from inserted where CNPJ like '%[^0-9]%')
+		throw 50028, 'CNPJ deve conter exatamente 14 dígitos numéricos', 1;
+end
+GO

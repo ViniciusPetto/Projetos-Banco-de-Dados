@@ -499,7 +499,6 @@ create procedure criar_contrato
 	@id_locatario int,
 	@id_imovel int,
 	@data_inicio date,
-	@valor numeric(10,2),
 	@numero_meses int
 as
 begin
@@ -507,34 +506,37 @@ begin
 	declare @status_imovel char(20);
 
 	begin try
-		begin transaction;
+		begin transaction
+
+		select @id_locatario = id_pessoa
+		from locatario
+		where id_pessoa = @id_locatario
+
+		if @id_locatario is null
+			throw 50001, 'Locatário não encontrado', 1;
 
 		select @status_credito = status_analise_credito
 		from locatario
 		where id_pessoa = @id_locatario;
 
 		if @status_credito is null
-			throw 50001, 'Locatário não encontrado', 1;
+			throw 50002, 'Status de crédito não encontrado', 1;
 
 		if @status_credito <> 'APROVADO'
-			throw 50002, 'Crédito do locatário não aprovado', 1;
+			throw 50003, 'Crédito do locatário não aprovado', 1;
 
 		select @status_imovel = status_anuncio
 		from imovel
 		where id_imovel = @id_imovel;
 
 		if @status_imovel is null
-			throw 50003, 'Imóvel não encontrado', 1;
+			throw 50004, 'Imóvel não encontrado', 1;
 
-		if @status_imovel <> 'DISPONÍVEL'
-			throw 50004, 'Imóvel não disponível', 1;
+		if @status_imovel <> 'DISPONIVEL'
+			throw 50005, 'Imóvel não disponível', 1;
 
 		insert into contrato (id_pessoa, id_imovel, status_proprietario, status_locatario, data_inicio, data_fim, valor, numero_meses)
-		values (@id_locatario, @id_imovel, 1, 1, @data_inicio, NULL, @valor, @numero_meses);
-
-		update imovel
-		set status_anuncio = 'ALUGADO'
-		where id_imovel = @id_imovel;
+		values (@id_locatario, @id_imovel, 0, 0, @data_inicio, NULL, 0, @numero_meses);
 
 		commit transaction;
 		return 1;
@@ -546,4 +548,27 @@ begin
 	end catch
 end
 GO
+
 -- Triggers
+-- Preenchimento automatico de dados do contrato e alteracao da disponibilidade do imovel
+create trigger preencher_dados_contrato_imovel on contrato for insert
+as
+	update contrato
+	set status_proprietario = 1, 
+		status_locatario = 1,
+		valor = i.valor_aluguel 
+	from contrato c 
+	inner join inserted ins on c.id_contrato = ins.id_contrato
+	inner join imovel i on ins.id_imovel = i.id_imovel
+
+	if @@ROWCOUNT > 0
+	begin
+		update imovel
+		set status_anuncio = 'INDISPONIVEL'
+		where id_imovel in (select id_imovel from inserted)
+
+		if @@ROWCOUNT = 0
+			rollback transaction
+	end
+	else
+		rollback transaction

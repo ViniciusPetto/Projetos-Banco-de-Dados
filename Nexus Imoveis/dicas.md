@@ -18,56 +18,61 @@ _Legenda: ✅ implementada · ⏳ pendente_
 
 ### **Operações de Negócio Complexas:**
 7. ✅ `criar_contrato` — Validar crédito do locatário + INSERT contrato + atualizar status do imóvel (3 ops, validação + transactions)
-8. ⏳ `encerrar_contrato` — UPDATE contrato + gerar vistoria final + listar reparos pendentes (multi-passo com lógica)
-9. ⏳ `registrar_vistoria` — INSERT vistoria + gerar reparos associados (2 ops, transaction)
-10. ⏳ `agendar_visita` — Validar disponibilidade do agente + verificar horário + INSERT agendamento (validação + transaction)
-11. ⏳ `atualizar_disponibilidade_vistoriador` — UPDATE vistoriador + verificar vistorias pendentes (lógica condicional)
-12. ⏳ `excluir_pessoa` — Validar dependências + DELETE em cascata com verificações (validação + transaction)
+8. ✅ `encerrar_contrato` — UPDATE contrato + gerar vistoria final + listar reparos pendentes (multi-passo com lógica)
+9. ✅ `registrar_vistoria` — INSERT vistoria + gerar reparos associados (2 ops, transaction)
+10. ✅ `excluir_pessoa`
 
 ---
 
 ## **VIEWS (Consultas Complexas com JOINs Reutilizáveis)**
 
-1. ⏳ `vw_ImoveisDisponiveis` — JOIN `imovel` + `proprietario` + `pessoa_fisica/juridica`, filtrando por status
-2. ⏳ `vw_HistoricoContratosPorLocatario` — JOIN `contrato` + `locatario` + `pessoa_fisica` + `imovel` + `proprietario`
-3. ⏳ `vw_DetalhesImovel` — JOIN `imovel` + `proprietario` + `pessoa` + contagem de vistorias/contratos
-4. ⏳ `vw_RelatorioAgentes` — JOIN `agente` + `funcionario` + `pessoa_fisica`, com comissões
-5. ⏳ `vw_VistoriasPorImovel` — JOIN `vistoria` + `imovel` + `vistoriador` + `pessoa_fisica`, com status de reparos
-6. ⏳ `vw_ImoveisComReparosPendentes` — JOIN `imovel` + `vistoria` + `reparo`, filtrando por status de reparo
-7. ⏳ `vw_DashboardLocatario` — JOIN `locatario` + `pessoa_fisica` + `contrato` + `imovel` + `proprietario`
-8. ⏳ `vw_AgendamentosProximosMeses` — JOIN `agendamento` + `agente` + `locatario` + `pessoa_fisica`, com filtro de datas
+1. ⏳ `imoveis_disponiveis` — JOIN `imovel` + `proprietario` + `pessoa_fisica/juridica`, filtrando por status
+2. ⏳ `historico_contratos_por_locatario` — JOIN `contrato` + `locatario` + `pessoa_fisica` + `imovel` + `proprietario`
+3. ⏳ `detalhes_imovel` — JOIN `imovel` + `proprietario` + `pessoa` + contagem de vistorias/contratos
+4. ⏳ `relatorio_agentes` — JOIN `agente` + `funcionario` + `pessoa_fisica`, com comissões
+5. ⏳ `vistorias_por_imovel` — JOIN `vistoria` + `imovel` + `vistoriador` + `pessoa_fisica`, com status de reparos
+6. ⏳ `imoveis_com_reparos_pendentes` — JOIN `imovel` + `vistoria` + `reparo`, filtrando por status de reparo
+7. ⏳ `dashboard_locatario` — JOIN `locatario` + `pessoa_fisica` + `contrato` + `imovel` + `proprietario`
+8. ⏳ `agendamentos_proximos_meses` — JOIN `agendamento` + `agente` + `locatario` + `pessoa_fisica`, com filtro de datas
 
 ---
 
-## **TRIGGERS (apenas auditoria — regras de negócio ficam nas procedures)**
+## **TRIGGERS (validações e auditoria)**
 
-1. ⏳ `tr_AuditoriaAlteracoesPessoa` — Ao INSERT/UPDATE/DELETE `pessoa`, registrar em tabela de auditoria (exceção: precisa valer para qualquer origem de alteração)
-
-As demais regras de trigger foram migradas para procedures (ver seção TRIGGERS, no fim do documento).
+1. ✅ `validar_formato_cpf` — Após INSERT/UPDATE em `pessoa_fisica`, bloqueia CPF que não tenha exatamente 11 dígitos numéricos
+2. ✅ `validar_formato_cnpj` — Após INSERT/UPDATE em `pessoa_juridica`, bloqueia CNPJ que não tenha exatamente 14 dígitos numéricos
+3. ✅ `validar_liberacao_vistoriador` — Após UPDATE em `vistoriador`, bloqueia a ativação quando há vistorias agendadas para o futuro (substitui a procedure `atualizar_disponibilidade_vistoriador`)
+4. ✅ `validar_vinculo_agente` — Após INSERT em `agendamento`, bloqueia agente sem vínculo ativo com a empresa (conflitos de horário ficam com PK e UNIQUE)
+5. ⏳ `auditoria_alteracoes_pessoa` — Ao INSERT/UPDATE/DELETE `pessoa`, registrar em tabela de auditoria (ainda não implementada)
 
 ---
 ## **RESUMO RECOMENDADO:**
 
 | Tipo | Qtd | Prioridade | Complexidade |
 |------|-----|-----------|--------------|
-| **Procedures** | 12 | 🔴 Alta | ⭐⭐⭐⭐⭐ |
+| **Procedures** | 10 | 🔴 Alta | ⭐⭐⭐⭐⭐ |
 | **Views** | 8 | 🟡 Média | ⭐⭐⭐ |
-| **Triggers** | 1 | 🟡 Média | ⭐⭐⭐⭐ |
+| **Triggers** | 5 | 🟡 Média | ⭐⭐⭐⭐ |
 
-**Status atual:** 7 de 12 procedures implementadas · 0 de 8 views · 1 trigger mantido (auditoria).
+**Status atual:** 10 procedures implementadas · 4 triggers implementados · 0 de 8 views · auditoria pendente.
 
-**Próximos passos:** implementar as 5 procedures pendentes (`encerrar_contrato`, `registrar_vistoria`, `agendar_visita`, `atualizar_disponibilidade_vistoriador`, `excluir_pessoa`) e depois as views.
+**Próximos passos:** implementar as 8 views e a tabela de auditoria com `auditoria_alteracoes_pessoa`.
+
+**Decisões registradas:**
+- **Agendamento:** PK `(id_agente, data_visita, hora_visita)` e `UNIQUE (id_locatario, data_visita, hora_visita)`. O mesmo par agente/locatário pode ter visitas em horários diferentes, e o banco garante os dois conflitos.
+- **Procedures que viraram triggers:** `atualizar_disponibilidade_vistoriador` (virou `validar_liberacao_vistoriador`) e `agendar_visita` (virou `validar_vinculo_agente`, já que os conflitos de horário são garantidos pelo banco).
+- **Validação de CPF/CNPJ:** em trigger, por valer para qualquer INSERT ou UPDATE, independentemente da procedure.
+- **Exclusão:** `excluir_pessoa` não tem `@force_delete`. Remover em cascata contratos e vistorias apagaria o histórico, então a procedure bloqueia qualquer dependência.
+- **Domínio de status:** o `CHECK` de `imovel.status_anuncio` aceita somente `DISPONIVEL` e `INDISPONIVEL`. Por isso, imóvel alugado fica `INDISPONIVEL`.
 ___
 
 ## :bust_in_silhouette:
 Poderia me detalhar porque as seguintes operações de procedures de fato serão usadas como procedures? Ou porque são operações mais complexas?
 
 7.	✅ `criar_contrato` — Validar crédito do locatário + INSERT contrato + atualizar status do imóvel (3 ops, validação + transactions)
-8.	⏳ `encerrar_contrato` — UPDATE contrato + gerar vistoria final + listar reparos pendentes (multi-passo com lógica)
-9.	⏳ `registrar_vistoria` — INSERT vistoria + gerar reparos associados (2 ops, transaction)
-10.	⏳ `agendar_visita` — Validar disponibilidade do agente + verificar horário + INSERT agendamento (validação + transaction)
-11.	⏳ `atualizar_disponibilidade_vistoriador` — UPDATE vistoriador + verificar vistorias pendentes (lógica condicional)
-12.	⏳ `excluir_pessoa` — Validar dependências + DELETE em cascata com verificações (validação + transaction)
+8.	✅ `encerrar_contrato` — UPDATE contrato + gerar vistoria final + listar reparos pendentes (multi-passo com lógica)
+9.	✅ `registrar_vistoria` — INSERT vistoria + gerar reparos associados (2 ops, transaction)
+10.	✅ `excluir_pessoa`
 ## :speech_balloon: SSMS
 Excelente pergunta! Vou detalhar cada uma com exemplos práticos de **por que são operações complexas**:
 
@@ -85,7 +90,7 @@ SELECT status_analise_credito FROM locatario WHERE id_pessoa = 5
 -- Problema 2: Múltiplas operações desacopladas
 INSERT INTO contrato (id_pessoa, id_imovel, ...) VALUES (5, 10, ...)
 -- E depois atualizar o imóvel:
-UPDATE imovel SET status_anuncio = 'ALUGADO' WHERE id_imovel = 10
+UPDATE imovel SET status_anuncio = 'INDISPONIVEL' WHERE id_imovel = 10
 -- Se a primeira INSERT falhar e a segunda suceder? Estado inconsistente!
 
 -- COM PROCEDURE (correto):
@@ -117,7 +122,7 @@ BEGIN
         FROM imovel 
         WHERE id_imovel = @id_imovel
         
-        IF @status_imovel != 'DISPONÍVEL'
+        IF @status_imovel != 'DISPONIVEL'
         BEGIN
             THROW 50002, 'Imóvel não disponível', 1
         END
@@ -130,7 +135,7 @@ BEGIN
         
         -- 4️⃣ UPDATE imóvel (ATOMICIDADE: se INSERT falha, isso não executa)
         UPDATE imovel 
-        SET status_anuncio = 'ALUGADO' 
+        SET status_anuncio = 'INDISPONIVEL' 
         WHERE id_imovel = @id_imovel
         
         COMMIT TRANSACTION
@@ -197,9 +202,9 @@ BEGIN
         (id_imovel, id_pessoa, tipo, data_vistoria, descricao_estado_conservacao)
         VALUES (@id_imovel, @id_vistoriador, 'FINAL', @data_fim, '')
         
-        -- 4️⃣ UPDATE imóvel: voltar a DISPONÍVEL
+        -- 4️⃣ UPDATE imóvel: voltar a DISPONIVEL
         UPDATE imovel 
-        SET status_anuncio = 'DISPONÍVEL' 
+        SET status_anuncio = 'DISPONIVEL' 
         WHERE id_imovel = @id_imovel
         
         -- 5️⃣ RETORNAR reparos pendentes (para notificação)
@@ -294,141 +299,9 @@ END
 
 ---
 
-## **10. `agendar_visita` — Validar disponibilidade + Verificar horário + INSERT**
 
-**Por que é uma Procedure:**
-```sql
--- SEM PROCEDURE (problemático):
--- Verificar se agente está disponível
-SELECT disponibilidade FROM agente WHERE id_pessoa = 3
--- Validar se agente não tem outro agendamento no mesmo horário
-SELECT COUNT(*) FROM agendamento 
-WHERE id_agente = 3 AND data_visita = '2026-11-15' AND hora_visita = '14:00'
--- Depois inserir
-INSERT INTO agendamento VALUES (3, 5, '2026-11-15', '14:00')
--- Problema: Race condition! Entre a validação e insert, outro usuário pode agendar!
 
--- COM PROCEDURE (correto com LOCK):
-CREATE PROCEDURE agendar_visita
-    @id_agente INT,
-    @id_locatario INT,
-    @data_visita DATE,
-    @hora_visita TIME
-AS
-BEGIN
-    BEGIN TRY
-        BEGIN TRANSACTION
-        
-        -- 1️⃣ LOCK a tabela agendamento (evita race condition)
-        -- 2️⃣ Validar disponibilidade do agente
-        DECLARE @disponibilidade BIT
-        SELECT @disponibilidade = disponibilidade 
-        FROM agente 
-        WHERE id_pessoa = @id_agente
-        
-        IF @disponibilidade = 0
-        BEGIN
-            THROW 50004, 'Agente não disponível', 1
-        END
-        
-        -- 3️⃣ Validar se agente não tem agendamento no mesmo horário
-        IF EXISTS (SELECT 1 FROM agendamento 
-                   WHERE id_agente = @id_agente 
-                   AND data_visita = @data_visita 
-                   AND hora_visita = @hora_visita)
-        BEGIN
-            THROW 50005, 'Agente já tem agendamento neste horário', 1
-        END
-        
-        -- 4️⃣ Validar se locatário não tem outro agendamento no mesmo horário
-        IF EXISTS (SELECT 1 FROM agendamento 
-                   WHERE id_locatario = @id_locatario 
-                   AND data_visita = @data_visita 
-                   AND hora_visita = @hora_visita)
-        BEGIN
-            THROW 50006, 'Locatário já tem agendamento neste horário', 1
-        END
-        
-        -- 5️⃣ INSERT agendamento
-        INSERT INTO agendamento (id_agente, id_locatario, data_visita, hora_visita)
-        VALUES (@id_agente, @id_locatario, @data_visita, @hora_visita)
-        
-        COMMIT TRANSACTION
-        PRINT 'Agendamento realizado com sucesso'
-    END TRY
-    BEGIN CATCH
-        ROLLBACK TRANSACTION
-        THROW
-    END CATCH
-END
-```
-
-**Por que é complexa:**
-- ✅ **Múltiplas validações** (3 SELECTs antes do INSERT)
-- ✅ **Race condition** — precisa de LOCK exclusivo na transaction
-- ✅ **Business rules** — agente e locatário não podem ter conflito de horário
-- ✅ **Transaction obrigatória** — validações devem ser atômicas com INSERT
-
----
-
-## **11. `atualizar_disponibilidade_vistoriador` — UPDATE + Lógica condicional**
-
-**Por que é uma Procedure:**
-```sql
--- SEM PROCEDURE (problemático):
-UPDATE vistoriador SET disponibilidade = 0 WHERE id_pessoa = 5
--- Mas como decide quando marcar como disponível novamente?
--- Manual? Automático baseado em vistorias pendentes? Não há lógica!
-
--- COM PROCEDURE (com lógica):
-CREATE PROCEDURE atualizar_disponibilidade_vistoriador
-    @id_vistoriador INT,
-    @disponibilidade BIT
-AS
-BEGIN
-    BEGIN TRY
-        BEGIN TRANSACTION
-        
-        -- 1️⃣ Se tentar ATIVAR disponibilidade
-        IF @disponibilidade = 1
-        BEGIN
-            -- Verificar se tem vistorias pendentes
-            DECLARE @vistorias_pendentes INT
-            SELECT @vistorias_pendentes = COUNT(*) 
-            FROM vistoria 
-            WHERE id_pessoa = @id_vistoriador 
-            AND CAST(data_vistoria AS DATE) > CAST(GETDATE() AS DATE)
-            
-            -- Só pode ativar se NÃO tem vistorias futuras agendadas
-            IF @vistorias_pendentes > 0
-            BEGIN
-                THROW 50007, 'Vistoriador tem vistorias agendadas para o futuro', 1
-            END
-        END
-        
-        -- 2️⃣ UPDATE disponibilidade
-        UPDATE vistoriador 
-        SET disponibilidade = @disponibilidade 
-        WHERE id_pessoa = @id_vistoriador
-        
-        COMMIT TRANSACTION
-        PRINT 'Disponibilidade atualizada com sucesso'
-    END TRY
-    BEGIN CATCH
-        ROLLBACK TRANSACTION
-        THROW
-    END CATCH
-END
-```
-
-**Por que é complexa:**
-- ✅ **Lógica condicional** — comportamento diferente baseado no valor
-- ✅ **Validação de regra de negócio** — não pode ficar disponível se tem vistoria agendada
-- ✅ **SELECT + UPDATE** — precisa consultar antes de decidir se atualiza
-
----
-
-## **12. `excluir_pessoa` — Validar dependências + DELETE em cascata**
+## **10. `excluir_pessoa` — Validar dependências + DELETE em cascata**
 
 **Por que é uma Procedure:**
 ```sql
@@ -517,8 +390,6 @@ END
 | **criar_contrato** | 4 operações (validações + INSERT + UPDATE) + transaction |
 | **encerrar_contrato** | 5 operações + obrigação de criar vistoria final + retorna dados |
 | **registrar_vistoria** | Looping de reparos + SCOPE_IDENTITY + múltiplas operações |
-| **agendar_visita** | 3 validações + race condition + lock necessário |
-| **atualizar_disponibilidade_vistoriador** | Lógica condicional + validação antes de atualizar |
 | **excluir_pessoa** | 3+ validações + cascata controlada + force delete |
 
 **Todos compartilham:**
@@ -539,7 +410,7 @@ ___
 
 ---
 
-## **1. `vw_ImoveisDisponiveis` — Listar imóveis com dados do proprietário**
+## **1. `imoveis_disponiveis` — Listar imóveis com dados do proprietário**
 
 **Por que é uma View:**
 ```sql
@@ -553,14 +424,14 @@ JOIN proprietario pr ON i.id_pessoa = pr.id_pessoa
 JOIN cliente c ON pr.id_pessoa = c.id_pessoa
 JOIN pessoa p ON pr.id_pessoa = p.id_pessoa
 JOIN pessoa_fisica pf ON p.id_pessoa = pf.id_pessoa
-WHERE i.status_anuncio = 'DISPONÍVEL'
+WHERE i.status_anuncio = 'DISPONIVEL'
 AND pr.preferencia_contato IS NOT NULL
 ORDER BY i.valor_aluguel ASC
 
 -- Problema: Query longa, fácil de errar joins, precisa repetir em múltiplas telas
 
 -- COM VIEW (correto):
-CREATE VIEW vw_ImoveisDisponiveis AS
+CREATE VIEW imoveis_disponiveis AS
 SELECT 
     i.id_imovel,
     i.endereco,
@@ -579,13 +450,13 @@ JOIN proprietario pr ON i.id_pessoa = pr.id_pessoa
 JOIN cliente c ON pr.id_pessoa = c.id_pessoa
 JOIN pessoa p ON pr.id_pessoa = p.id_pessoa
 JOIN pessoa_fisica pf ON p.id_pessoa = pf.id_pessoa
-WHERE i.status_anuncio = 'DISPONÍVEL'
+WHERE i.status_anuncio = 'DISPONIVEL'
   AND c.status_conta = 1
   AND pf.nome IS NOT NULL
 GO
 
 -- Agora usuário faz consulta simples:
-SELECT * FROM vw_ImoveisDisponiveis WHERE valor_aluguel BETWEEN 1000 AND 3000
+SELECT * FROM imoveis_disponiveis WHERE valor_aluguel BETWEEN 1000 AND 3000
 ```
 
 **Por que é complexa:**
@@ -596,7 +467,7 @@ SELECT * FROM vw_ImoveisDisponiveis WHERE valor_aluguel BETWEEN 1000 AND 3000
 
 ---
 
-## **2. `vw_HistoricoContratosPorLocatario` — Ver todos os contratos de um locatário**
+## **2. `historico_contratos_por_locatario` — Ver todos os contratos de um locatário**
 
 **Por que é uma View:**
 ```sql
@@ -620,7 +491,7 @@ ORDER BY c.data_inicio DESC
 -- Problema: Muitos joins, código duplicado em várias telas
 
 -- COM VIEW (correto):
-CREATE VIEW vw_HistoricoContratosPorLocatario AS
+CREATE VIEW historico_contratos_por_locatario AS
 SELECT 
     c.id_contrato,
     c.data_inicio,
@@ -650,7 +521,7 @@ JOIN pessoa_fisica pf ON p.id_pessoa = pf.id_pessoa
 GO
 
 -- Uso simples:
-SELECT * FROM vw_HistoricoContratosPorLocatario WHERE id_locatario = 5
+SELECT * FROM historico_contratos_por_locatario WHERE id_locatario = 5
 ```
 
 **Por que é complexa:**
@@ -661,7 +532,7 @@ SELECT * FROM vw_HistoricoContratosPorLocatario WHERE id_locatario = 5
 
 ---
 
-## **3. `vw_DetalhesImovel` — Visão completa de um imóvel**
+## **3. `detalhes_imovel` — Visão completa de um imóvel**
 
 **Por que é uma View:**
 ```sql
@@ -674,7 +545,7 @@ SELECT * FROM proprietario WHERE ...
 -- Código repetido, lógica espalhada
 
 -- COM VIEW (correto):
-CREATE VIEW vw_DetalhesImovel AS
+CREATE VIEW detalhes_imovel AS
 SELECT 
     i.id_imovel,
     i.endereco,
@@ -715,7 +586,7 @@ JOIN pessoa_fisica pf ON p.id_pessoa = pf.id_pessoa
 GO
 
 -- Uso:
-SELECT * FROM vw_DetalhesImovel WHERE id_imovel = 10
+SELECT * FROM detalhes_imovel WHERE id_imovel = 10
 ```
 
 **Por que é complexa:**
@@ -727,7 +598,7 @@ SELECT * FROM vw_DetalhesImovel WHERE id_imovel = 10
 
 ---
 
-## **4. `vw_RelatorioAgentes` — Performance de agentes com comissões**
+## **4. `relatorio_agentes` — Performance de agentes com comissões**
 
 **Por que é uma View:**
 ```sql
@@ -754,7 +625,7 @@ GROUP BY ag.id_pessoa, pf.nome, ag.numero_CRECI, ag.porcentagem_comissao
 -- Problema: Cálculo de comissão espalhado, código duplicado em relatórios
 
 -- COM VIEW (correto):
-CREATE VIEW vw_RelatorioAgentes AS
+CREATE VIEW relatorio_agentes AS
 SELECT 
     ag.id_pessoa,
     pf.nome,
@@ -783,7 +654,7 @@ GROUP BY
 GO
 
 -- Uso:
-SELECT * FROM vw_RelatorioAgentes WHERE status_ativo = 1 ORDER BY comissao_total DESC
+SELECT * FROM relatorio_agentes WHERE status_ativo = 1 ORDER BY comissao_total DESC
 ```
 
 **Por que é complexa:**
@@ -796,7 +667,7 @@ SELECT * FROM vw_RelatorioAgentes WHERE status_ativo = 1 ORDER BY comissao_total
 
 ---
 
-## **5. `vw_VistoriasPorImovel` — Histórico de vistorias com status de reparos**
+## **5. `vistorias_por_imovel` — Histórico de vistorias com status de reparos**
 
 **Por que é uma View:**
 ```sql
@@ -819,7 +690,7 @@ WHERE v.id_imovel = @id_imovel
 -- Problema: Múltiplos joins, GROUP BY complexo, código repetido
 
 -- COM VIEW (correto):
-CREATE VIEW vw_VistoriasPorImovel AS
+CREATE VIEW vistorias_por_imovel AS
 SELECT 
     v.id_vistoria,
     v.id_imovel,
@@ -844,7 +715,7 @@ GROUP BY
 GO
 
 -- Uso:
-SELECT * FROM vw_VistoriasPorImovel WHERE id_imovel = 10 ORDER BY data_vistoria DESC
+SELECT * FROM vistorias_por_imovel WHERE id_imovel = 10 ORDER BY data_vistoria DESC
 ```
 
 **Por que é complexa:**
@@ -856,7 +727,7 @@ SELECT * FROM vw_VistoriasPorImovel WHERE id_imovel = 10 ORDER BY data_vistoria 
 
 ---
 
-## **6. `vw_ImoveisComReparosPendentes` — Imóveis que precisam de manutenção**
+## **6. `imoveis_com_reparos_pendentes` — Imóveis que precisam de manutenção**
 
 **Por que é uma View:**
 ```sql
@@ -879,7 +750,7 @@ GROUP BY i.id_imovel, i.endereco, i.valor_aluguel, pf.nome
 -- Problema: Query pesada, precisa ser executada frequentemente
 
 -- COM VIEW (correto):
-CREATE VIEW vw_ImoveisComReparosPendentes AS
+CREATE VIEW imoveis_com_reparos_pendentes AS
 SELECT 
     i.id_imovel,
     i.endereco,
@@ -907,7 +778,7 @@ GROUP BY
 GO
 
 -- Uso: Notificação automática
-SELECT * FROM vw_ImoveisComReparosPendentes 
+SELECT * FROM imoveis_com_reparos_pendentes 
 WHERE dias_pendente > 30
 ORDER BY dias_pendente DESC
 ```
@@ -922,7 +793,7 @@ ORDER BY dias_pendente DESC
 
 ---
 
-## **7. `vw_DashboardLocatario` — Visão completa do locatário**
+## **7. `dashboard_locatario` — Visão completa do locatário**
 
 **Por que é uma View:**
 ```sql
@@ -935,7 +806,7 @@ SELECT COUNT(*) FROM vistoria WHERE ...
 -- Código espalhado, múltiplas queries
 
 -- COM VIEW (correto):
-CREATE VIEW vw_DashboardLocatario AS
+CREATE VIEW dashboard_locatario AS
 SELECT 
     l.id_pessoa,
     pf.nome,
@@ -970,7 +841,7 @@ JOIN pessoa_fisica pf ON p.id_pessoa = pf.id_pessoa
 GO
 
 -- Uso:
-SELECT * FROM vw_DashboardLocatario WHERE id_pessoa = 5
+SELECT * FROM dashboard_locatario WHERE id_pessoa = 5
 ```
 
 **Por que é complexa:**
@@ -982,7 +853,7 @@ SELECT * FROM vw_DashboardLocatario WHERE id_pessoa = 5
 
 ---
 
-## **8. `vw_AgendamentosProximosMeses` — Agenda de visitas futuras**
+## **8. `agendamentos_proximos_meses` — Agenda de visitas futuras**
 
 **Por que é uma View:**
 ```sql
@@ -1008,7 +879,7 @@ ORDER BY agd.data_visita, agd.hora_visita
 -- Problema: Query muito longa, múltiplos JOINs, código duplicado em agendas
 
 -- COM VIEW (correto):
-CREATE VIEW vw_AgendamentosProximosMeses AS
+CREATE VIEW agendamentos_proximos_meses AS
 SELECT 
     agd.id_agente,
     agd.id_locatario,
@@ -1047,7 +918,7 @@ WHERE agd.data_visita >= CAST(GETDATE() AS DATE)
 GO
 
 -- Uso:
-SELECT * FROM vw_AgendamentosProximosMeses 
+SELECT * FROM agendamentos_proximos_meses 
 WHERE status_agendamento IN ('HOJE', 'PRÓXIMA SEMANA')
 ORDER BY data_visita, hora_visita
 ```
@@ -1065,46 +936,49 @@ ORDER BY data_visita, hora_visita
 
 | View | Razão Principal |
 |------|-----------------|
-| **vw_ImoveisDisponiveis** | 4 JOINs + cálculo preço/m² |
-| **vw_HistoricoContratosPorLocatario** | 6 JOINs + CASE logic + DATEDIFF |
-| **vw_DetalhesImovel** | 5 JOINs + sub-queries correlacionadas + agregações |
-| **vw_RelatorioAgentes** | 4 JOINs + LEFT JOINs + agregações complexas + comissões |
-| **vw_VistoriasPorImovel** | 5 JOINs + GROUP BY + STRING_AGG |
-| **vw_ImoveisComReparosPendentes** | 5 JOINs + agregações + DATEDIFF |
-| **vw_DashboardLocatario** | 4 JOINs + múltiplas sub-queries correlacionadas |
-| **vw_AgendamentosProximosMeses** | 6 JOINs + CASE logic + cálculos temporais |
+| **imoveis_disponiveis** | 4 JOINs + cálculo preço/m² |
+| **historico_contratos_por_locatario** | 6 JOINs + CASE logic + DATEDIFF |
+| **detalhes_imovel** | 5 JOINs + sub-queries correlacionadas + agregações |
+| **relatorio_agentes** | 4 JOINs + LEFT JOINs + agregações complexas + comissões |
+| **vistorias_por_imovel** | 5 JOINs + GROUP BY + STRING_AGG |
+| **imoveis_com_reparos_pendentes** | 5 JOINs + agregações + DATEDIFF |
+| **dashboard_locatario** | 4 JOINs + múltiplas sub-queries correlacionadas |
+| **agendamentos_proximos_meses** | 6 JOINs + CASE logic + cálculos temporais |
 
 ---
 
 ---
 
-# TRIGGERS — Apenas auditoria (regras de negócio ficam nas procedures)
+# TRIGGERS — Validação de formato e auditoria
 
-## **Decisão: procedure no lugar de trigger**
+## **Decisão: onde colocar cada regra**
 
-Regras de negócio de uma operação ficam dentro da procedure que realiza a operação. Trigger fica restrito ao que precisa valer para **qualquer** alteração, venha de onde vier.
+Dois critérios definem o lugar de cada regra:
+
+- **Validação de dados: trigger first.** Regras de formato e integridade que devem valer para qualquer INSERT ou UPDATE, venha de onde vier. Exemplo: CPF e CNPJ. Essas regras começam sempre como trigger.
+- **Operação de negócio: procedure.** Operações com várias etapas, regras de negócio e transação explícita. Exemplo: `criar_contrato`, `registrar_vistoria`.
+
+A auditoria também fica em trigger, porque precisa registrar alterações feitas fora das procedures.
 
 **Motivos:**
-- **Fluxo explícito:** em `criar_contrato` estão as validações, o INSERT do contrato e a mudança de status do imóvel, no mesmo lugar. Com trigger, quem insere em `contrato` não sabe que o imóvel mudou de status.
-- **Erros claros:** a procedure devolve mensagens específicas (`THROW 50001` a `50004`) e controla a transação explicitamente (`BEGIN TRANSACTION`, `COMMIT`, `ROLLBACK`).
-- **Sem duplicação:** se a procedure e um trigger fizessem o mesmo efeito (por exemplo, `criar_contrato` e `tr_AtualizarStatusImovelContrato` marcando o imóvel como `ALUGADO`), a regra existiria em dois lugares e poderia ser aplicada duas vezes.
-- **Testável:** a procedure roda isolada, com parâmetros conhecidos.
+- Um trigger de validação garante a regra em qualquer caminho de escrita. Uma validação só dentro da procedure cobre apenas quem chama a procedure.
+- Procedure deixa explícito o fluxo de uma operação. Quem lê `criar_contrato` vê as validações, o INSERT e a mudança de status do imóvel no mesmo lugar.
+- Evita duplicação: se a procedure e um trigger fizessem o mesmo efeito, a regra existiria em dois lugares.
 
-**Trade-off aceito:** a regra só vale quando a operação passa pela procedure. Um INSERT, UPDATE ou DELETE direto na tabela não é validado. Recomendação: a aplicação recebe permissão de `EXECUTE` nas procedures e não de escrita direta nas tabelas.
-
-**Exceção mantida:** `tr_AuditoriaAlteracoesPessoa`. A auditoria precisa registrar alterações de qualquer origem. Se estivesse em uma procedure, um UPDATE direto em `pessoa` ficaria sem registro.
+**Trade-off:** um trigger roda sem ser chamado, então quem lê o INSERT não vê a validação. Por isso, ela fica documentada aqui. Um `THROW` dentro do trigger desfaz o comando inteiro.
 
 **Destino das regras migradas:**
 
 | Trigger original | Destino | Status |
 |---|---|---|
-| `tr_AtualizarStatusImovelContrato` | `criar_contrato` | ✅ implementada |
-| `tr_LiberarStatusImovelFimContrato` | `encerrar_contrato` | ⏳ pendente |
-| `tr_ValidarDisponibilidadeVistoriador` | `registrar_vistoria` | ⏳ pendente |
-| `tr_PreventirRepetirAgendamento` | `agendar_visita` | ⏳ pendente |
-| `tr_PreventirDeleteDePessoaComDependencias` | `excluir_pessoa` | ⏳ pendente |
-| `tr_ValidarFormatoCPF` | `cadastrar_pessoa_fisica` | ⏳ validação ainda não implementada |
-| `tr_ValidarFormatoCNPJ` | `cadastrar_pessoa_juridica` | ⏳ validação ainda não implementada |
+| `atualizar_status_imovel_contrato` | `criar_contrato` | ✅ implementada |
+| `liberar_status_imovel_fim_contrato` | `encerrar_contrato` | ✅ implementada |
+| `validar_disponibilidade_vistoriador` | `registrar_vistoria` | ✅ implementada |
+| `prevenir_repetir_agendamento` | `validar_vinculo_agente` (trigger) e PK/UNIQUE de `agendamento` | ✅ implementada |
+| `atualizar_disponibilidade_vistoriador` (procedure) | `validar_liberacao_vistoriador` (trigger) | ✅ implementada |
+| `prevenir_delete_pessoa_com_dependencias` | `excluir_pessoa` | ✅ implementada |
+| `validar_formato_cpf` | mantido em trigger (validação de dados) | ✅ implementada |
+| `validar_formato_cnpj` | mantido em trigger (validação de dados) | ✅ implementada |
 
 **Procedure ou trigger, em resumo:**
 
@@ -1115,10 +989,10 @@ Regras de negócio de uma operação ficam dentro da procedure que realiza a ope
 | Parâmetros | Sim | Não (acessa `inserted` e `deleted`) |
 | Retorno | Código de retorno e resultados; erros via `THROW` | Não retorna valor |
 | Transação | Controlada explicitamente | Faz parte da transação do comando que disparou |
-| Uso típico | Operações com várias etapas e regras de negócio | Regra que não pode ser esquecida, como auditoria |
+| Uso típico | Operações com várias etapas e regras de negócio | Validação de dados e auditoria, regras que não podem ser esquecidas |
 
 ---
-## **1. `tr_AuditoriaAlteracoesPessoa` — Registrar todas as alterações em pessoa**
+## **1. `auditoria_alteracoes_pessoa` — Registrar todas as alterações em pessoa**
 
 **Por que é um Trigger:**
 ```sql
@@ -1141,7 +1015,7 @@ UPDATE pessoa SET nome = 'João Silva' WHERE id_pessoa = 5
 -- Se há erro depois, não há histórico
 
 -- COM TRIGGER (correto):
-CREATE TRIGGER tr_AuditoriaAlteracoesPessoa
+CREATE TRIGGER auditoria_alteracoes_pessoa
 ON pessoa
 AFTER INSERT, UPDATE, DELETE
 AS
@@ -1203,7 +1077,11 @@ SELECT * FROM auditoria_pessoa WHERE id_pessoa = 5 ORDER BY data_operacao DESC
 
 | Trigger | Tipo | Razão Principal |
 |---------|------|-----------------|
-| **tr_AuditoriaAlteracoesPessoa** | AFTER INSERT, UPDATE, DELETE | Rastreamento: registra todas as alterações em `pessoa`, de qualquer origem |
+| **validar_formato_cpf** | AFTER INSERT, UPDATE | Validação: CPF com 11 dígitos numéricos |
+| **validar_formato_cnpj** | AFTER INSERT, UPDATE | Validação: CNPJ com 14 dígitos numéricos |
+| **validar_liberacao_vistoriador** | AFTER UPDATE | Validação: vistoriador não é ativado com vistorias futuras |
+| **validar_vinculo_agente** | AFTER INSERT | Validação: impede agendamento com agente sem vínculo ativo |
+| **auditoria_alteracoes_pessoa** | AFTER INSERT, UPDATE, DELETE | Rastreamento: registra alterações em `pessoa` (pendente) |
 
 ---
 ## **CONCLUSÃO:**
@@ -1219,19 +1097,19 @@ SELECT * FROM auditoria_pessoa WHERE id_pessoa = 5 ORDER BY data_operacao DESC
 ┌─────────────────────────────────────────────────────────┐
 │  PROCEDURE: criar_contrato                              │
 │  ✅ Valida crédito e disponibilidade                    │
-│  ✅ INSERT contrato + UPDATE imóvel (ALUGADO)           │
+│  ✅ INSERT contrato + UPDATE imóvel (INDISPONIVEL)           │
 │  ✅ Transação explícita, erros via THROW                │
 └──────────────┬──────────────────────────────────────────┘
                │
                ▼
 ┌─────────────────────────────────────────────────────────┐
-│  TRIGGER: tr_AuditoriaAlteracoesPessoa                  │
+│  TRIGGER: auditoria_alteracoes_pessoa                  │
 │  ✅ Registra qualquer alteração em pessoa               │
 └─────────────────────────────────────────────────────────┘
 
-VIEW: vw_HistoricoContratosPorLocatario  (somente leitura)
+VIEW: historico_contratos_por_locatario  (somente leitura)
 ```
 
 - **Procedures** = operações com várias etapas e regras de negócio. São a forma padrão de alterar dados.
 - **Views** = consultas reutilizáveis com JOINs e agregações, somente leitura.
-- **Triggers** = apenas auditoria, por ser a única regra que precisa valer para qualquer origem de alteração.
+- **Triggers** = validação de formato (CPF/CNPJ) e auditoria: regras que precisam valer para qualquer origem de alteração.

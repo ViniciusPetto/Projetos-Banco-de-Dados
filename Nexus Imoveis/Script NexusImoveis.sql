@@ -204,7 +204,8 @@ create table agendamento(
 	data_visita date not null,
 	hora_visita time not null,
 
-	constraint pk_agendamento primary key(id_agente, id_locatario),
+	constraint pk_agendamento primary key(id_agente, data_visita, hora_visita),
+	constraint uq_agendamento_locatario unique (id_locatario, data_visita, hora_visita),
 	constraint fk_agendamento_agente foreign key (id_agente) references agente(id_pessoa),
 	constraint fk_agendamento_locatario foreign key (id_locatario) references locatario(id_pessoa)
 );
@@ -235,6 +236,9 @@ join pessoa p on c.id_pessoa = p.id_pessoa
 left join pessoa_fisica pf on p.id_pessoa = pf.id_pessoa
 left join pessoa_juridica pj on p.id_pessoa = pj.id_pessoa
 where i.status_anuncio = 'DISPONIVEL' and c.status_conta = 1 and i.status_aptidao = 1
+GO
+
+SET QUOTED_IDENTIFIER ON;
 GO
 
 -- Procedures
@@ -549,10 +553,162 @@ begin
 end
 GO
 
+-- Encerramento de contrato: fecha o contrato, gera vistoria final, libera o imóvel e lista reparos pendentes
+create procedure encerrar_contrato
+	@id_contrato int,
+	@id_vistoriador int,
+	@descricao_estado varchar(500) = NULL
+as
+begin
+	declare @id_imovel int;
+	declare @data_fim date = CAST(GETDATE() AS date);
+
+	begin try
+		begin transaction;
+
+		if not exists (select 1 from contrato where id_contrato = @id_contrato)
+			throw 50010, 'Contrato não encontrado', 1;
+
+		select @id_imovel = id_imovel
+		from contrato
+		where id_contrato = @id_contrato and data_fim is null;
+
+		if @id_imovel is null
+			throw 50011, 'Contrato já encerrado', 1;
+
+		if not exists (select 1 from vistoriador where id_pessoa = @id_vistoriador)
+			throw 50012, 'Vistoriador não encontrado', 1;
+
+		update contrato
+		set data_fim = @data_fim, status_locatario = 0
+		where id_contrato = @id_contrato;
+
+		insert into vistoria (id_imovel, id_pessoa, tipo, descricao_estado_conservacao, data_vistoria)
+		values (@id_imovel, @id_vistoriador, 'FINAL', @descricao_estado, @data_fim);
+
+		update imovel
+		set status_anuncio = 'DISPONIVEL'
+		where id_imovel = @id_imovel;
+
+		commit transaction;
+
+		select r.num_reparo, r.descricao_necessidade, r.responsabilidade_financeira
+		from reparo r
+		join vistoria v on v.id_vistoria = r.id_vistoria
+		where v.id_imovel = @id_imovel and r.status_notificacao = 'PENDENTE';
+
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+		throw;
+	end catch
+end
+GO
+
+-- Registro de vistoria: grava a vistoria, os reparos (recebidos em XML) e marca o vistoriador como ocupado
+create procedure registrar_vistoria
+	@id_imovel int,
+	@id_vistoriador int,
+	@tipo char(7),
+	@descricao_estado varchar(500),
+	@reparos_xml xml = NULL
+as
+begin
+	declare @id_vistoria int;
+	declare @disponibilidade bit;
+
+	begin try
+		begin transaction;
+
+		if not exists (select 1 from imovel where id_imovel = @id_imovel)
+			throw 50013, 'Imóvel não encontrado', 1;
+
+		select @disponibilidade = disponibilidade
+		from vistoriador
+		where id_pessoa = @id_vistoriador;
+
+		if @disponibilidade is null
+			throw 50012, 'Vistoriador não encontrado', 1;
+
+		if @disponibilidade = 0
+			throw 50014, 'Vistoriador não está disponível', 1;
+
+		if @tipo not in ('ENTRADA', 'FINAL')
+			throw 50015, 'Tipo de vistoria inválido', 1;
+
+		insert into vistoria (id_imovel, id_pessoa, tipo, descricao_estado_conservacao, data_vistoria)
+		values (@id_imovel, @id_vistoriador, @tipo, @descricao_estado, CAST(GETDATE() AS date));
+
+		set @id_vistoria = SCOPE_IDENTITY();
+
+		insert into reparo (id_vistoria, data_reparo, status_notificacao, responsabilidade_financeira, descricao_necessidade)
+		select
+			@id_vistoria,
+			CAST(GETDATE() AS date),
+			'PENDENTE',
+			r.value('(responsabilidade)[1]', 'char(12)'),
+			r.value('(descricao)[1]', 'varchar(500)')
+		from @reparos_xml.nodes('/reparos/reparo') as t(r);
+
+		update vistoriador
+		set disponibilidade = 0
+		where id_pessoa = @id_vistoriador;
+
+		commit transaction;
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+		throw;
+	end catch
+end
+GO
+
+-- Exclusão de pessoa: bloqueia se houver registros dependentes (o histórico não é apagado)
+create procedure excluir_pessoa
+	@id_pessoa int
+as
+begin
+	begin try
+		begin transaction;
+
+		if not exists (select 1 from pessoa where id_pessoa = @id_pessoa)
+			throw 50022, 'Pessoa não encontrada', 1;
+
+		if exists (select 1 from contrato where id_pessoa = @id_pessoa)
+			throw 50023, 'Pessoa possui contratos como locatário', 1;
+
+		if exists (select 1 from imovel where id_pessoa = @id_pessoa)
+			throw 50024, 'Pessoa possui imóveis cadastrados', 1;
+
+		if exists (select 1 from agendamento where id_agente = @id_pessoa or id_locatario = @id_pessoa)
+			throw 50025, 'Pessoa possui agendamentos', 1;
+
+		if exists (select 1 from vistoria where id_pessoa = @id_pessoa)
+			throw 50026, 'Pessoa possui vistorias registradas', 1;
+
+		delete from pessoa
+		where id_pessoa = @id_pessoa;
+
+		commit transaction;
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+		throw;
+	end catch
+end
+GO
+
 -- Triggers
 -- Preenchimento automatico de dados do contrato e alteracao da disponibilidade do imovel
 create trigger preencher_dados_contrato_imovel on contrato for insert
 as
+begin
 	update contrato
 	set status_proprietario = 1, 
 		status_locatario = 1,
@@ -572,3 +728,61 @@ as
 	end
 	else
 		rollback transaction
+end
+GO
+
+-- Liberação do vistoriador: não permite ficar disponível com vistorias agendadas para o futuro
+create trigger validar_liberacao_vistoriador
+on vistoriador
+after update
+as
+begin
+	if exists (
+		select 1
+		from inserted i
+		join deleted d on d.id_pessoa = i.id_pessoa
+		where d.disponibilidade = 0 and i.disponibilidade = 1
+		and exists (
+			select 1
+			from vistoria v
+			where v.id_pessoa = i.id_pessoa and v.data_vistoria > CAST(GETDATE() AS date)))
+		throw 50021, 'Vistoriador tem vistorias agendadas para os próximos dias', 1;
+end
+GO
+
+-- Vínculo do agente: impede agendamento de agente sem vínculo ativo com a empresa (conflitos de horário são garantidos pela PK e pela UNIQUE)
+create trigger validar_vinculo_agente
+on agendamento
+after insert
+as
+begin
+	if exists (
+		select 1
+		from inserted i
+		join funcionario f on f.id_pessoa = i.id_agente
+		where f.status_ativo = 0)
+		throw 50018, 'Agente sem vínculo ativo com a empresa', 1;
+end
+GO
+
+-- Validação de formato do CPF: vale para qualquer INSERT ou UPDATE em pessoa_fisica
+create trigger validar_formato_cpf
+on pessoa_fisica
+after insert, update
+as
+begin
+	if exists (select 1 from inserted where CPF like '%[^0-9]%')
+		throw 50027, 'CPF deve conter exatamente 11 dígitos numéricos', 1;
+end
+GO
+
+-- Validação de formato do CNPJ: vale para qualquer INSERT ou UPDATE em pessoa_juridica
+create trigger validar_formato_cnpj
+on pessoa_juridica
+after insert, update
+as
+begin
+	if exists (select 1 from inserted where CNPJ like '%[^0-9]%')
+		throw 50028, 'CNPJ deve conter exatamente 14 dígitos numéricos', 1;
+end
+GO

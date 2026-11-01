@@ -140,7 +140,8 @@ create table imovel(
 	status_anuncio char(20) not null,
 
 	constraint pk_imovel primary key(id_imovel),
-	constraint fk_imovel_proprietario foreign key (id_pessoa) references proprietario(id_pessoa)
+	constraint fk_imovel_proprietario foreign key (id_pessoa) references proprietario(id_pessoa),
+	constraint ck_status_anuncio check (status_anuncio in ('DISPONIVEL', 'INDISPONIVEL'))
 );
 create index idx_imovel_proprietario on imovel(id_pessoa);
 create index idx_imovel_valor_aluguel on imovel(valor_aluguel);
@@ -211,9 +212,32 @@ create index idx_agendamento_data on agendamento(data_visita);
 GO
 
 -- Views
+-- Imoveis disponiveis
+create view imoveis_disponiveis as
+select
+	i.id_imovel,
+	i.endereco,
+	i.descricao,
+	i.valor_aluguel,
+	i.area_m2,
+	i.num_matricula,
+	coalesce(pf.nome, pj.nome_fantasia) as nome_proprietario,
+	coalesce(pf.CPF, pj.CNPJ) as documento,
+	p.tipo as tipo_proprietario,
+	p.telefone,
+	p.email,
+	pr.preferencia_contato
+from imovel i
+join proprietario pr on i.id_pessoa = pr.id_pessoa
+join cliente c on pr.id_pessoa = c.id_pessoa
+join pessoa p on c.id_pessoa = p.id_pessoa
+left join pessoa_fisica pf on p.id_pessoa = pf.id_pessoa
+left join pessoa_juridica pj on p.id_pessoa = pj.id_pessoa
+where i.status_anuncio = 'DISPONIVEL' and c.status_conta = 1 and i.status_aptidao = 1
+GO
 
 -- Procedures
---Cadastro de pessoa fisica
+-- Cadastro de pessoa fisica
 create procedure cadastrar_pessoa_fisica
 	@email varchar(100),
 	@telefone char(14),

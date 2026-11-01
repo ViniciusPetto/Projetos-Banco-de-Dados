@@ -6,81 +6,74 @@ Excelente! Analisando o modelo `NexusImoveis`, identifiquei as operações compl
 ---
 
 ## **PROCEDURES (Operações Multi-Passo com Transactions)**
+_Legenda: ✅ implementada · ⏳ pendente_
 
 ### **Cadastros Complexos (Herança de Pessoas):**
-1. ✅ `sp_CadastrarPessoaFisica` — INSERT `pessoa` + INSERT `pessoa_fisica` (2 ops, FK)
-2. ✅ `sp_CadastrarPessoaJuridica` — INSERT `pessoa` + INSERT `pessoa_juridica` (2 ops, FK)
-3. ✅ `sp_CadastrarVistoriador` — INSERT `pessoa` + INSERT `funcionario` + INSERT `vistoriador` (3 ops, FK em cascata)
-4. ✅ `sp_CadastrarAgente` — INSERT `pessoa` + INSERT `funcionario` + INSERT `agente` (3 ops, FK em cascata)
-5. ✅ `sp_CadastrarProprietario` — INSERT `pessoa` + INSERT `cliente` + INSERT `proprietario` (3 ops, FK em cascata)
-6. ✅ `sp_CadastrarLocatario` — INSERT `pessoa` + INSERT `cliente` + INSERT `locatario` (3 ops, FK em cascata)
+1. ✅ `cadastrar_pessoa_fisica` — INSERT `pessoa` + INSERT `pessoa_fisica` (2 ops, FK)
+2. ✅ `cadastrar_pessoa_juridica` — INSERT `pessoa` + INSERT `pessoa_juridica` (2 ops, FK)
+3. ✅ `cadastrar_vistoriador` — INSERT `pessoa` + INSERT `pessoa_fisica` + INSERT `funcionario` + INSERT `vistoriador` (4 ops, FK em cascata)
+4. ✅ `cadastrar_agente` — INSERT `pessoa` + INSERT `pessoa_fisica` + INSERT `funcionario` + INSERT `agente` (4 ops, FK em cascata)
+5. ✅ `cadastrar_proprietario` — INSERT `pessoa` + INSERT `pessoa_fisica` + INSERT `cliente` + INSERT `proprietario` (4 ops, FK em cascata)
+6. ✅ `cadastrar_locatario` — INSERT `pessoa` + INSERT `pessoa_fisica` + INSERT `cliente` + INSERT `locatario` (4 ops, FK em cascata)
 
 ### **Operações de Negócio Complexas:**
-7. ✅ `sp_CriarContrato` — Validar crédito do locatário + INSERT contrato + atualizar status do imóvel (3 ops, validação + transactions)
-8. ✅ `sp_EncerrarContrato` — UPDATE contrato + gerar vistoria final + listar reparos pendentes (multi-passo com lógica)
-9. ✅ `sp_RegistrarVistoria` — INSERT vistoria + gerar reparos associados (2 ops, transaction)
-10. ✅ `sp_AgendarVisita` — Validar disponibilidade do agente + verificar horário + INSERT agendamento (validação + transaction)
-11. ✅ `sp_AtualizarDisponibilidadeVistoriador` — UPDATE vistoriador + verificar vistorias pendentes (lógica condicional)
-12. ✅ `sp_ExcluirPessoa` — Validar dependências + DELETE em cascata com verificações (validação + transaction)
+7. ✅ `criar_contrato` — Validar crédito do locatário + INSERT contrato + atualizar status do imóvel (3 ops, validação + transactions)
+8. ⏳ `encerrar_contrato` — UPDATE contrato + gerar vistoria final + listar reparos pendentes (multi-passo com lógica)
+9. ⏳ `registrar_vistoria` — INSERT vistoria + gerar reparos associados (2 ops, transaction)
+10. ⏳ `agendar_visita` — Validar disponibilidade do agente + verificar horário + INSERT agendamento (validação + transaction)
+11. ⏳ `atualizar_disponibilidade_vistoriador` — UPDATE vistoriador + verificar vistorias pendentes (lógica condicional)
+12. ⏳ `excluir_pessoa` — Validar dependências + DELETE em cascata com verificações (validação + transaction)
 
 ---
 
 ## **VIEWS (Consultas Complexas com JOINs Reutilizáveis)**
 
-1. ✅ `vw_ImoveisDisponiveis` — JOIN `imovel` + `proprietario` + `pessoa_fisica/juridica`, filtrando por status
-2. ✅ `vw_HistoricoContratosPorLocatario` — JOIN `contrato` + `locatario` + `pessoa_fisica` + `imovel` + `proprietario`
-3. ✅ `vw_DetalhesImovel` — JOIN `imovel` + `proprietario` + `pessoa` + contagem de vistorias/contratos
-4. ✅ `vw_RelatorioAgentes` — JOIN `agente` + `funcionario` + `pessoa_fisica`, com comissões
-5. ✅ `vw_VistoriasPorImovel` — JOIN `vistoria` + `imovel` + `vistoriador` + `pessoa_fisica`, com status de reparos
-6. ✅ `vw_ImoveisComReparosPendentes` — JOIN `imovel` + `vistoria` + `reparo`, filtrando por status de reparo
-7. ✅ `vw_DashboardLocatario` — JOIN `locatario` + `pessoa_fisica` + `contrato` + `imovel` + `proprietario`
-8. ✅ `vw_AgendamentosProximosMeses` — JOIN `agendamento` + `agente` + `locatario` + `pessoa_fisica`, com filtro de datas
+1. ⏳ `vw_ImoveisDisponiveis` — JOIN `imovel` + `proprietario` + `pessoa_fisica/juridica`, filtrando por status
+2. ⏳ `vw_HistoricoContratosPorLocatario` — JOIN `contrato` + `locatario` + `pessoa_fisica` + `imovel` + `proprietario`
+3. ⏳ `vw_DetalhesImovel` — JOIN `imovel` + `proprietario` + `pessoa` + contagem de vistorias/contratos
+4. ⏳ `vw_RelatorioAgentes` — JOIN `agente` + `funcionario` + `pessoa_fisica`, com comissões
+5. ⏳ `vw_VistoriasPorImovel` — JOIN `vistoria` + `imovel` + `vistoriador` + `pessoa_fisica`, com status de reparos
+6. ⏳ `vw_ImoveisComReparosPendentes` — JOIN `imovel` + `vistoria` + `reparo`, filtrando por status de reparo
+7. ⏳ `vw_DashboardLocatario` — JOIN `locatario` + `pessoa_fisica` + `contrato` + `imovel` + `proprietario`
+8. ⏳ `vw_AgendamentosProximosMeses` — JOIN `agendamento` + `agente` + `locatario` + `pessoa_fisica`, com filtro de datas
 
 ---
 
-## **TRIGGERS (Validações e Efeitos Colaterais Automáticos)**
+## **TRIGGERS (apenas auditoria — regras de negócio ficam nas procedures)**
 
-1. ✅ `tr_AtualizarStatusImovelContrato` — Ao INSERT/UPDATE `contrato`, atualizar `status_anuncio` do imóvel para "ALUGADO"
-2. ✅ `tr_LiberarStatusImovelFimContrato` — Ao UPDATE `contrato` (fim), reverter `status_anuncio` para "DISPONÍVEL"
-3. ✅ `tr_ValidarDisponibilidadeVistoriador` — Ao INSERT `vistoria`, validar que `vistoriador.disponibilidade = 1`
-4. ✅ `tr_ValidarFormatoCPF` — Ao INSERT/UPDATE `pessoa_fisica`, validar formato/dígitos de CPF (usa função de validação)
-5. ✅ `tr_ValidarFormatoCNPJ` — Ao INSERT/UPDATE `pessoa_juridica`, validar formato/dígitos de CNPJ
-6. ✅ `tr_PreventirDeleteDePessoaComDependencias` — Ao DELETE `pessoa`, validar que não há contratos/imóveis ativos
-7. ✅ `tr_PreventirRepetirAgendamento` — Ao INSERT `agendamento`, validar que agente não tem outro agendamento no mesmo horário
-8. ✅ `tr_AuditoriaAlteracoesPessoa` — Ao INSERT/UPDATE/DELETE `pessoa`, registrar em tabela de auditoria (logs)
+1. ⏳ `tr_AuditoriaAlteracoesPessoa` — Ao INSERT/UPDATE/DELETE `pessoa`, registrar em tabela de auditoria (exceção: precisa valer para qualquer origem de alteração)
+
+As demais regras de trigger foram migradas para procedures (ver seção TRIGGERS, no fim do documento).
 
 ---
-
 ## **RESUMO RECOMENDADO:**
 
 | Tipo | Qtd | Prioridade | Complexidade |
 |------|-----|-----------|--------------|
 | **Procedures** | 12 | 🔴 Alta | ⭐⭐⭐⭐⭐ |
 | **Views** | 8 | 🟡 Média | ⭐⭐⭐ |
-| **Triggers** | 8 | 🟡 Média | ⭐⭐⭐⭐ |
+| **Triggers** | 1 | 🟡 Média | ⭐⭐⭐⭐ |
 
-**Próximos passos:**
-- Quer que eu desenvolva alguma procedure específica primeiro?
-- Quer começar pelas views de consulta?
-- Ou prefere começar pelos triggers de validação?
+**Status atual:** 7 de 12 procedures implementadas · 0 de 8 views · 1 trigger mantido (auditoria).
 
+**Próximos passos:** implementar as 5 procedures pendentes (`encerrar_contrato`, `registrar_vistoria`, `agendar_visita`, `atualizar_disponibilidade_vistoriador`, `excluir_pessoa`) e depois as views.
 ___
 
 ## :bust_in_silhouette:
 Poderia me detalhar porque as seguintes operações de procedures de fato serão usadas como procedures? Ou porque são operações mais complexas?
 
-7.	✅ sp_CriarContrato — Validar crédito do locatário + INSERT contrato + atualizar status do imóvel (3 ops, validação + transactions)
-8.	✅ sp_EncerrarContrato — UPDATE contrato + gerar vistoria final + listar reparos pendentes (multi-passo com lógica)
-9.	✅ sp_RegistrarVistoria — INSERT vistoria + gerar reparos associados (2 ops, transaction)
-10.	✅ sp_AgendarVisita — Validar disponibilidade do agente + verificar horário + INSERT agendamento (validação + transaction)
-11.	✅ sp_AtualizarDisponibilidadeVistoriador — UPDATE vistoriador + verificar vistorias pendentes (lógica condicional)
-12.	✅ sp_ExcluirPessoa — Validar dependências + DELETE em cascata com verificações (validação + transaction)
+7.	✅ `criar_contrato` — Validar crédito do locatário + INSERT contrato + atualizar status do imóvel (3 ops, validação + transactions)
+8.	⏳ `encerrar_contrato` — UPDATE contrato + gerar vistoria final + listar reparos pendentes (multi-passo com lógica)
+9.	⏳ `registrar_vistoria` — INSERT vistoria + gerar reparos associados (2 ops, transaction)
+10.	⏳ `agendar_visita` — Validar disponibilidade do agente + verificar horário + INSERT agendamento (validação + transaction)
+11.	⏳ `atualizar_disponibilidade_vistoriador` — UPDATE vistoriador + verificar vistorias pendentes (lógica condicional)
+12.	⏳ `excluir_pessoa` — Validar dependências + DELETE em cascata com verificações (validação + transaction)
 ## :speech_balloon: SSMS
 Excelente pergunta! Vou detalhar cada uma com exemplos práticos de **por que são operações complexas**:
 
 ---
 
-## **7. `sp_CriarContrato` — Validar crédito + INSERT + UPDATE**
+## **7. `criar_contrato` — Validar crédito + INSERT + UPDATE**
 
 **Por que é uma Procedure:**
 ```sql
@@ -96,7 +89,7 @@ UPDATE imovel SET status_anuncio = 'ALUGADO' WHERE id_imovel = 10
 -- Se a primeira INSERT falhar e a segunda suceder? Estado inconsistente!
 
 -- COM PROCEDURE (correto):
-CREATE PROCEDURE sp_CriarContrato
+CREATE PROCEDURE criar_contrato
     @id_locatario INT,
     @id_imovel INT,
     @data_inicio DATE,
@@ -158,7 +151,7 @@ END
 
 ---
 
-## **8. `sp_EncerrarContrato` — UPDATE + Gerar vistoria + Listar reparos**
+## **8. `encerrar_contrato` — UPDATE + Gerar vistoria + Listar reparos**
 
 **Por que é uma Procedure:**
 ```sql
@@ -175,7 +168,7 @@ INSERT INTO vistoria (id_imovel, id_pessoa, tipo, data_vistoria) VALUES (...)
 -- Mas e se a vistoria não for criada? Contrato fica encerrado mas sem vistoria final!
 
 -- COM PROCEDURE (correto):
-CREATE PROCEDURE sp_EncerrarContrato
+CREATE PROCEDURE encerrar_contrato
     @id_contrato INT,
     @id_vistoriador INT
 AS
@@ -233,7 +226,7 @@ END
 
 ---
 
-## **9. `sp_RegistrarVistoria` — INSERT vistoria + Gerar reparos**
+## **9. `registrar_vistoria` — INSERT vistoria + Gerar reparos**
 
 **Por que é uma Procedure:**
 ```sql
@@ -247,7 +240,7 @@ VALUES (10, 5, 'ENTRADA', GETDATE())
 -- 3. Se fizer 1 reparo e esquecer o outro, ficam inconsistentes
 
 -- COM PROCEDURE (correto):
-CREATE PROCEDURE sp_RegistrarVistoria
+CREATE PROCEDURE registrar_vistoria
     @id_imovel INT,
     @id_vistoriador INT,
     @tipo CHAR(7),
@@ -301,7 +294,7 @@ END
 
 ---
 
-## **10. `sp_AgendarVisita` — Validar disponibilidade + Verificar horário + INSERT**
+## **10. `agendar_visita` — Validar disponibilidade + Verificar horário + INSERT**
 
 **Por que é uma Procedure:**
 ```sql
@@ -316,7 +309,7 @@ INSERT INTO agendamento VALUES (3, 5, '2026-11-15', '14:00')
 -- Problema: Race condition! Entre a validação e insert, outro usuário pode agendar!
 
 -- COM PROCEDURE (correto com LOCK):
-CREATE PROCEDURE sp_AgendarVisita
+CREATE PROCEDURE agendar_visita
     @id_agente INT,
     @id_locatario INT,
     @data_visita DATE,
@@ -378,7 +371,7 @@ END
 
 ---
 
-## **11. `sp_AtualizarDisponibilidadeVistoriador` — UPDATE + Lógica condicional**
+## **11. `atualizar_disponibilidade_vistoriador` — UPDATE + Lógica condicional**
 
 **Por que é uma Procedure:**
 ```sql
@@ -388,7 +381,7 @@ UPDATE vistoriador SET disponibilidade = 0 WHERE id_pessoa = 5
 -- Manual? Automático baseado em vistorias pendentes? Não há lógica!
 
 -- COM PROCEDURE (com lógica):
-CREATE PROCEDURE sp_AtualizarDisponibilidadeVistoriador
+CREATE PROCEDURE atualizar_disponibilidade_vistoriador
     @id_vistoriador INT,
     @disponibilidade BIT
 AS
@@ -435,7 +428,7 @@ END
 
 ---
 
-## **12. `sp_ExcluirPessoa` — Validar dependências + DELETE em cascata**
+## **12. `excluir_pessoa` — Validar dependências + DELETE em cascata**
 
 **Por que é uma Procedure:**
 ```sql
@@ -449,7 +442,7 @@ DELETE FROM pessoa WHERE id_pessoa = 5
 -- Desastre! Estado completamente inconsistente!
 
 -- COM PROCEDURE (seguro):
-CREATE PROCEDURE sp_ExcluirPessoa
+CREATE PROCEDURE excluir_pessoa
     @id_pessoa INT,
     @force_delete BIT = 0
 AS
@@ -521,12 +514,12 @@ END
 
 | Procedure | Razão Principal |
 |-----------|-----------------|
-| **sp_CriarContrato** | 4 operações (validações + INSERT + UPDATE) + transaction |
-| **sp_EncerrarContrato** | 5 operações + obrigação de criar vistoria final + retorna dados |
-| **sp_RegistrarVistoria** | Looping de reparos + SCOPE_IDENTITY + múltiplas operações |
-| **sp_AgendarVisita** | 3 validações + race condition + lock necessário |
-| **sp_AtualizarDisponibilidade** | Lógica condicional + validação antes de atualizar |
-| **sp_ExcluirPessoa** | 3+ validações + cascata controlada + force delete |
+| **criar_contrato** | 4 operações (validações + INSERT + UPDATE) + transaction |
+| **encerrar_contrato** | 5 operações + obrigação de criar vistoria final + retorna dados |
+| **registrar_vistoria** | Looping de reparos + SCOPE_IDENTITY + múltiplas operações |
+| **agendar_visita** | 3 validações + race condition + lock necessário |
+| **atualizar_disponibilidade_vistoriador** | Lógica condicional + validação antes de atualizar |
+| **excluir_pessoa** | 3+ validações + cascata controlada + force delete |
 
 **Todos compartilham:**
 - ✅ Múltiplas operações (2+)
@@ -1085,376 +1078,47 @@ ORDER BY data_visita, hora_visita
 
 ---
 
-# TRIGGERS — Validações e Efeitos Colaterais Automáticos
+# TRIGGERS — Apenas auditoria (regras de negócio ficam nas procedures)
+
+## **Decisão: procedure no lugar de trigger**
+
+Regras de negócio de uma operação ficam dentro da procedure que realiza a operação. Trigger fica restrito ao que precisa valer para **qualquer** alteração, venha de onde vier.
+
+**Motivos:**
+- **Fluxo explícito:** em `criar_contrato` estão as validações, o INSERT do contrato e a mudança de status do imóvel, no mesmo lugar. Com trigger, quem insere em `contrato` não sabe que o imóvel mudou de status.
+- **Erros claros:** a procedure devolve mensagens específicas (`THROW 50001` a `50004`) e controla a transação explicitamente (`BEGIN TRANSACTION`, `COMMIT`, `ROLLBACK`).
+- **Sem duplicação:** se a procedure e um trigger fizessem o mesmo efeito (por exemplo, `criar_contrato` e `tr_AtualizarStatusImovelContrato` marcando o imóvel como `ALUGADO`), a regra existiria em dois lugares e poderia ser aplicada duas vezes.
+- **Testável:** a procedure roda isolada, com parâmetros conhecidos.
+
+**Trade-off aceito:** a regra só vale quando a operação passa pela procedure. Um INSERT, UPDATE ou DELETE direto na tabela não é validado. Recomendação: a aplicação recebe permissão de `EXECUTE` nas procedures e não de escrita direta nas tabelas.
+
+**Exceção mantida:** `tr_AuditoriaAlteracoesPessoa`. A auditoria precisa registrar alterações de qualquer origem. Se estivesse em uma procedure, um UPDATE direto em `pessoa` ficaria sem registro.
+
+**Destino das regras migradas:**
+
+| Trigger original | Destino | Status |
+|---|---|---|
+| `tr_AtualizarStatusImovelContrato` | `criar_contrato` | ✅ implementada |
+| `tr_LiberarStatusImovelFimContrato` | `encerrar_contrato` | ⏳ pendente |
+| `tr_ValidarDisponibilidadeVistoriador` | `registrar_vistoria` | ⏳ pendente |
+| `tr_PreventirRepetirAgendamento` | `agendar_visita` | ⏳ pendente |
+| `tr_PreventirDeleteDePessoaComDependencias` | `excluir_pessoa` | ⏳ pendente |
+| `tr_ValidarFormatoCPF` | `cadastrar_pessoa_fisica` | ⏳ validação ainda não implementada |
+| `tr_ValidarFormatoCNPJ` | `cadastrar_pessoa_juridica` | ⏳ validação ainda não implementada |
+
+**Procedure ou trigger, em resumo:**
+
+| | Procedure | Trigger |
+|---|---|---|
+| Quando roda | Quando é chamada com `EXEC` | Automaticamente, em INSERT, UPDATE ou DELETE |
+| Quem decide | A aplicação | O próprio banco, sempre |
+| Parâmetros | Sim | Não (acessa `inserted` e `deleted`) |
+| Retorno | Código de retorno e resultados; erros via `THROW` | Não retorna valor |
+| Transação | Controlada explicitamente | Faz parte da transação do comando que disparou |
+| Uso típico | Operações com várias etapas e regras de negócio | Regra que não pode ser esquecida, como auditoria |
 
 ---
-
-## **1. `tr_AtualizarStatusImovelContrato` — Marcar imóvel como alugado**
-
-**Por que é um Trigger:**
-```sql
--- SEM TRIGGER (problemático):
--- Ao inserir contrato, usuário TERIA que:
-INSERT INTO contrato (id_pessoa, id_imovel, ...) VALUES (5, 10, ...)
--- E DEPOIS manualmente:
-UPDATE imovel SET status_anuncio = 'ALUGADO' WHERE id_imovel = 10
--- Problema: Se esquecer o UPDATE, imóvel fica marcado como disponível mas está alugado!
-
--- COM TRIGGER (correto):
-CREATE TRIGGER tr_AtualizarStatusImovelContrato
-ON contrato
-AFTER INSERT
-AS
-BEGIN
-    -- Automaticamente atualizar imóvel para ALUGADO
-    UPDATE imovel
-    SET status_anuncio = 'ALUGADO'
-    WHERE id_imovel IN (SELECT DISTINCT id_imovel FROM inserted)
-    
-    PRINT 'Imóvel marcado como alugado automaticamente'
-END
-GO
-
--- Agora usuário faz apenas:
-INSERT INTO contrato (id_pessoa, id_imovel, ...) VALUES (5, 10, ...)
--- BOOM! Imóvel já é marcado como ALUGADO automaticamente!
-```
-
-**Por que é um Trigger:**
-- ✅ **Efeito colateral automático** — não depende do usuário lembrar
-- ✅ **Atomicidade** — INSERT contrato + UPDATE imóvel acontecem juntos
-- ✅ **Segurança** — impede imóvel ser listado como disponível enquanto está alugado
-- ✅ **Transparência** — usuário não vê a lógica, apenas insere contrato
-- ✅ **Reutilizável** — qualquer INSERT (application, SSMS, script) ativa o trigger
-
----
-
-## **2. `tr_LiberarStatusImovelFimContrato` — Liberar imóvel após encerrar contrato**
-
-**Por que é um Trigger:**
-```sql
--- SEM TRIGGER (problemático):
--- Ao encerrar contrato:
-UPDATE contrato SET data_fim = GETDATE() WHERE id_contrato = 5
--- E DEPOIS usuário teria que:
-UPDATE imovel SET status_anuncio = 'DISPONÍVEL' WHERE id_imovel = 10
--- Problema: Se esquecer, imóvel continua marcado como 'ALUGADO' mas locatário saiu!
-
--- COM TRIGGER (correto):
-CREATE TRIGGER tr_LiberarStatusImovelFimContrato
-ON contrato
-AFTER UPDATE
-AS
-BEGIN
-    -- Se data_fim foi preenchida (contrato encerrado)
-    UPDATE imovel
-    SET status_anuncio = 'DISPONÍVEL'
-    WHERE id_imovel IN (
-        SELECT id_imovel FROM inserted 
-        WHERE data_fim IS NOT NULL
-    )
-    AND id_imovel NOT IN (
-        -- Não liberar se ainda há outro contrato ativo
-        SELECT id_imovel FROM contrato 
-        WHERE data_fim IS NULL
-    )
-    
-    PRINT 'Imóvel liberado para novo aluguel automaticamente'
-END
-GO
-
--- Agora:
-UPDATE contrato SET data_fim = GETDATE() WHERE id_contrato = 5
--- BOOM! Imóvel já volta para DISPONÍVEL se não há outro contrato!
-```
-
-**Por que é um Trigger:**
-- ✅ **Efeito colateral automático** — não depende do usuário
-- ✅ **Lógica condicional** — verifica se não há outro contrato antes de liberar
-- ✅ **Segurança** — impede dupla-aluguel ou deixar imóvel marcado incorretamente
-- ✅ **Business rule** — encapsulamento de regra de negócio
-
----
-
-## **3. `tr_ValidarDisponibilidadeVistoriador` — Impedir vistoria se indisponível**
-
-**Por que é um Trigger:**
-```sql
--- SEM TRIGGER (problemático):
--- Ao inserir vistoria, poderia:
-INSERT INTO vistoria (id_imovel, id_pessoa, ...) VALUES (10, 5, ...)
--- Mas se vistoriador (id_pessoa=5) está indisponível (disponibilidade=0)
--- Ninguém verifica! Problema: Agendou vistoria com vistoriador indisponível!
-
--- COM TRIGGER (correto):
-CREATE TRIGGER tr_ValidarDisponibilidadeVistoriador
-ON vistoria
-INSTEAD OF INSERT
-AS
-BEGIN
-    -- Verificar se vistoriador está disponível
-    DECLARE @id_vistoriador INT, @disponibilidade BIT
-    
-    SELECT @id_vistoriador = id_pessoa FROM inserted
-    SELECT @disponibilidade = disponibilidade 
-    FROM vistoriador 
-    WHERE id_pessoa = @id_vistoriador
-    
-    IF @disponibilidade = 0
-    BEGIN
-        THROW 50001, 'Vistoriador não está disponível', 1
-    END
-    
-    -- Se passou na validação, permite INSERT
-    INSERT INTO vistoria (id_imovel, id_pessoa, tipo, data_vistoria, descricao_estado_conservacao)
-    SELECT id_imovel, id_pessoa, tipo, data_vistoria, descricao_estado_conservacao 
-    FROM inserted
-    
-    PRINT 'Vistoria registrada com sucesso'
-END
-GO
-
--- Agora se tentar:
-INSERT INTO vistoria (id_imovel, id_pessoa, ...) VALUES (10, 5, ...)
--- E vistoriador 5 estiver indisponível:
--- ❌ ERRO! Trigger bloqueia a inserção
-```
-
-**Por que é um Trigger:**
-- ✅ **Validação automática** — bloqueia INSERT inválido
-- ✅ **INSTEAD OF** — intercepta a inserção antes de acontecer
-- ✅ **Segurança** — impede agendamento com vistoriador indisponível
-- ✅ **Business rule** — encapsula regra de negócio
-- ✅ **Transparência** — usuário não vê validação, apenas recebe erro se inválido
-
----
-
-## **4. `tr_ValidarFormatoCPF` — Validar formato do CPF**
-
-**Por que é um Trigger:**
-```sql
--- SEM TRIGGER (problemático):
--- Ao inserir pessoa_física:
-INSERT INTO pessoa_fisica (id_pessoa, CPF, nome, ...) 
-VALUES (5, '123ABC456', 'João', ...)
--- CPF inválido! Ninguém valida formato antes de inserir
-
--- COM TRIGGER (correto):
-CREATE TRIGGER tr_ValidarFormatoCPF
-ON pessoa_fisica
-INSTEAD OF INSERT
-AS
-BEGIN
-    DECLARE @cpf CHAR(11), @id_pessoa INT
-    
-    SELECT @cpf = CPF, @id_pessoa = id_pessoa FROM inserted
-    
-    -- Validar se tem 11 dígitos e são todos números
-    IF (@cpf NOT LIKE '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]')
-       OR (ISNUMERIC(@cpf) = 0)
-    BEGIN
-        THROW 50002, 'CPF deve conter exatamente 11 dígitos numéricos', 1
-    END
-    
-    -- Se passou, permite INSERT
-    INSERT INTO pessoa_fisica (id_pessoa, CPF, nome, data_nasc, estado_civil, nacionalidade)
-    SELECT id_pessoa, CPF, nome, data_nasc, estado_civil, nacionalidade FROM inserted
-    
-    PRINT 'CPF válido'
-END
-GO
-
--- Agora:
-INSERT INTO pessoa_fisica (..., CPF, ...) VALUES (..., '123ABC456', ...)
--- ❌ ERRO! Trigger bloqueia
-INSERT INTO pessoa_fisica (..., CPF, ...) VALUES (..., '12345678901', ...)
--- ✅ OK! Trigger permite
-```
-
-**Por que é um Trigger:**
-- ✅ **Validação de formato** — bloqueia dados inválidos na origem
-- ✅ **INSTEAD OF** — intercepta antes de inserir
-- ✅ **Data quality** — garante integridade de dados
-- ✅ **LIKE + ISNUMERIC** — validação robusta
-- ✅ **Aplicável a todos** — qualquer INSERT (application, script, SSMS) passa pela validação
-
----
-
-## **5. `tr_ValidarFormatoCNPJ` — Validar formato do CNPJ**
-
-**Por que é um Trigger:**
-```sql
--- Mesma lógica do CPF, mas para CNPJ
-
-CREATE TRIGGER tr_ValidarFormatoCNPJ
-ON pessoa_juridica
-INSTEAD OF INSERT
-AS
-BEGIN
-    DECLARE @cnpj CHAR(14), @id_pessoa INT
-    
-    SELECT @cnpj = CNPJ, @id_pessoa = id_pessoa FROM inserted
-    
-    -- Validar se tem 14 dígitos e são todos números
-    IF (@cnpj NOT LIKE '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]')
-       OR (ISNUMERIC(@cnpj) = 0)
-    BEGIN
-        THROW 50003, 'CNPJ deve conter exatamente 14 dígitos numéricos', 1
-    END
-    
-    -- Se passou, permite INSERT
-    INSERT INTO pessoa_juridica 
-    (id_pessoa, CNPJ, nome_fantasia, razao_social, data_abertura, inscricao_estadual, porte, status)
-    SELECT id_pessoa, CNPJ, nome_fantasia, razao_social, data_abertura, inscricao_estadual, porte, status 
-    FROM inserted
-    
-    PRINT 'CNPJ válido'
-END
-GO
-```
-
-**Por que é um Trigger:**
-- ✅ **Validação de formato** — mesma lógica do CPF
-- ✅ **Data quality** — garante CNPJ válido
-- ✅ **Aplicável a todos** — qualquer INSERT passa pela validação
-
----
-
-## **6. `tr_PreventirDeleteDePessoaComDependencias` — Impedir deletar pessoa com dados ativos**
-
-**Por que é um Trigger:**
-```sql
--- SEM TRIGGER (problemático):
--- Usuário poderia:
-DELETE FROM pessoa WHERE id_pessoa = 5
--- Mas pessoa 5 tem:
--- - Cliente ativo
--- - Contratos ativos
--- - Imóveis alugados
--- Desastre! Tudo é deletado em cascata (ON DELETE CASCADE)
-
--- COM TRIGGER (correto):
-CREATE TRIGGER tr_PreventirDeleteDePessoaComDependencias
-ON pessoa
-INSTEAD OF DELETE
-AS
-BEGIN
-    DECLARE @id_pessoa INT
-    SELECT @id_pessoa = id_pessoa FROM deleted
-    
-    -- Verificar contratos ativos
-    IF EXISTS (SELECT 1 FROM contrato c
-               WHERE c.id_imovel IN (
-                   SELECT id_imovel FROM imovel WHERE id_pessoa = @id_pessoa
-               ) AND c.data_fim IS NULL)
-    BEGIN
-        THROW 50004, 'Pessoa tem contratos ativos. Encerre-os primeiro', 1
-    END
-    
-    -- Verificar imóveis ativos
-    IF EXISTS (SELECT 1 FROM imovel 
-               WHERE id_pessoa = @id_pessoa AND status_anuncio != 'REMOVIDO')
-    BEGIN
-        THROW 50005, 'Pessoa tem imóveis ativos. Remova-os primeiro', 1
-    END
-    
-    -- Verificar agendamentos pendentes
-    IF EXISTS (SELECT 1 FROM agendamento agd
-               WHERE agd.id_agente IN (
-                   SELECT id_pessoa FROM agente WHERE id_pessoa = @id_pessoa
-               ) AND agd.data_visita > CAST(GETDATE() AS DATE))
-    BEGIN
-        THROW 50006, 'Agente tem agendamentos pendentes', 1
-    END
-    
-    -- Se passou todas as validações, permite DELETE
-    DELETE FROM pessoa WHERE id_pessoa = @id_pessoa
-    PRINT 'Pessoa deletada com sucesso'
-END
-GO
-
--- Agora:
-DELETE FROM pessoa WHERE id_pessoa = 5
--- Se pessoa 5 tem dependências ativas:
--- ❌ ERRO! Trigger bloqueia
--- Se não tem dependências:
--- ✅ OK! Trigger permite deletar
-```
-
-**Por que é um Trigger:**
-- ✅ **INSTEAD OF DELETE** — intercepta delete antes de acontecer
-- ✅ **Múltiplas validações** — verifica 3 tipos de dependências
-- ✅ **Proteção de dados** — impede perda acidental de dados
-- ✅ **Integridade referencial** — mais rigoroso que FK simples
-- ✅ **Aplicável a todos** — qualquer DELETE passa pela validação
-
----
-
-## **7. `tr_PreventirRepetirAgendamento` — Bloquear agendamento duplicado**
-
-**Por que é um Trigger:**
-```sql
--- SEM TRIGGER (problemático):
--- Usuário poderia:
-INSERT INTO agendamento VALUES (3, 5, '2026-11-15', '14:00')
--- E depois:
-INSERT INTO agendamento VALUES (3, 5, '2026-11-15', '14:00')  -- Duplicado!
--- Agente teria 2 agendamentos ao mesmo tempo!
-
--- COM TRIGGER (correto):
-CREATE TRIGGER tr_PreventirRepetirAgendamento
-ON agendamento
-INSTEAD OF INSERT
-AS
-BEGIN
-    DECLARE @id_agente INT, @id_locatario INT, @data_visita DATE, @hora_visita TIME
-    
-    SELECT @id_agente = id_agente, @id_locatario = id_locatario, 
-           @data_visita = data_visita, @hora_visita = hora_visita 
-    FROM inserted
-    
-    -- Verificar se agente já tem agendamento no mesmo horário
-    IF EXISTS (SELECT 1 FROM agendamento 
-               WHERE id_agente = @id_agente 
-               AND data_visita = @data_visita 
-               AND hora_visita = @hora_visita)
-    BEGIN
-        THROW 50007, 'Agente já tem agendamento neste horário', 1
-    END
-    
-    -- Verificar se locatário já tem agendamento no mesmo horário
-    IF EXISTS (SELECT 1 FROM agendamento 
-               WHERE id_locatario = @id_locatario 
-               AND data_visita = @data_visita 
-               AND hora_visita = @hora_visita)
-    BEGIN
-        THROW 50008, 'Locatário já tem agendamento neste horário', 1
-    END
-    
-    -- Se passou, permite INSERT
-    INSERT INTO agendamento (id_agente, id_locatario, data_visita, hora_visita)
-    SELECT id_agente, id_locatario, data_visita, hora_visita FROM inserted
-    
-    PRINT 'Agendamento realizado com sucesso'
-END
-GO
-
--- Agora:
-INSERT INTO agendamento VALUES (3, 5, '2026-11-15', '14:00')
--- ✅ OK! Primeiro agendamento
-INSERT INTO agendamento VALUES (3, 5, '2026-11-15', '14:00')
--- ❌ ERRO! Trigger bloqueia duplicata
-```
-
-**Por que é um Trigger:**
-- ✅ **INSTEAD OF INSERT** — valida antes de inserir
-- ✅ **Validação de duplicatas** — impede conflito de horários
-- ✅ **Segurança** — agente/locatário não podem ter múltiplos agendamentos simultâneos
-- ✅ **Business rule** — encapsula regra de calendário
-
----
-
-## **8. `tr_AuditoriaAlteracoesPessoa` — Registrar todas as alterações em pessoa**
+## **1. `tr_AuditoriaAlteracoesPessoa` — Registrar todas as alterações em pessoa**
 
 **Por que é um Trigger:**
 ```sql
@@ -1539,55 +1203,35 @@ SELECT * FROM auditoria_pessoa WHERE id_pessoa = 5 ORDER BY data_operacao DESC
 
 | Trigger | Tipo | Razão Principal |
 |---------|------|-----------------|
-| **tr_AtualizarStatusImovelContrato** | AFTER INSERT | Efeito colateral: marca imóvel como alugado |
-| **tr_LiberarStatusImovelFimContrato** | AFTER UPDATE | Efeito colateral: libera imóvel após encerrar |
-| **tr_ValidarDisponibilidadeVistoriador** | INSTEAD OF INSERT | Validação: bloqueia vistoria se indisponível |
-| **tr_ValidarFormatoCPF** | INSTEAD OF INSERT | Validação: valida formato do CPF |
-| **tr_ValidarFormatoCNPJ** | INSTEAD OF INSERT | Validação: valida formato do CNPJ |
-| **tr_PreventirDeleteDePessoaComDependencias** | INSTEAD OF DELETE | Proteção: bloqueia delete com dependências ativas |
-| **tr_PreventirRepetirAgendamento** | INSTEAD OF INSERT | Validação: impede agendamento duplicado |
-| **tr_AuditoriaAlteracoesPessoa** | AFTER INSERT, UPDATE, DELETE | Rastreamento: registra todas alterações |
-
-**Padrões de Trigger:**
-
-| Padrão | Quando Usar | Tipo |
-|--------|-----------|------|
-| **Efeito Colateral** | UPDATE automático relacionado | AFTER |
-| **Validação** | Bloquear operação inválida | INSTEAD OF |
-| **Proteção** | Impedir DELETE/UPDATE perigoso | INSTEAD OF |
-| **Auditoria** | Registrar alterações | AFTER |
-| **Lógica de Negócio** | Regra complexa que envolve múltiplas tabelas | AFTER ou INSTEAD OF |
+| **tr_AuditoriaAlteracoesPessoa** | AFTER INSERT, UPDATE, DELETE | Rastreamento: registra todas as alterações em `pessoa`, de qualquer origem |
 
 ---
-
 ## **CONCLUSÃO:**
 
 **Procedures**, **Views** e **Triggers** trabalham juntos:
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  Aplicação (C#, Python, Node.js, etc)                   │
-│  INSERT INTO contrato ...                               │
+│  EXEC criar_contrato ...                                │
 └──────────────┬──────────────────────────────────────────┘
                │
                ▼
 ┌─────────────────────────────────────────────────────────┐
-│  TRIGGER: tr_AtualizarStatusImovelContrato             │
-│  ✅ Valida e marca imóvel como ALUGADO                 │
+│  PROCEDURE: criar_contrato                              │
+│  ✅ Valida crédito e disponibilidade                    │
+│  ✅ INSERT contrato + UPDATE imóvel (ALUGADO)           │
+│  ✅ Transação explícita, erros via THROW                │
 └──────────────┬──────────────────────────────────────────┘
                │
                ▼
 ┌─────────────────────────────────────────────────────────┐
-│  PROCEDURE: sp_CriarContrato (melhor prática)          │
-│  ✅ Orquestra validações + INSERT contrato + UPDATE    │
-└──────────────┬──────────────────────────────────────────┘
-               │
-               ▼
-┌─────────────────────────────────────────────────────────┐
-│  VIEW: vw_HistoricoContratosPorLocatario               │
-│  ✅ Consulta dados complexos para dashboard            │
+│  TRIGGER: tr_AuditoriaAlteracoesPessoa                  │
+│  ✅ Registra qualquer alteração em pessoa               │
 └─────────────────────────────────────────────────────────┘
+
+VIEW: vw_HistoricoContratosPorLocatario  (somente leitura)
 ```
 
-- **Procedures** = Orquestração de operações complexas
-- **Views** = Consultas reutilizáveis com JOINs/agregações
-- **Triggers** = Regras automáticas + validações + auditoria
+- **Procedures** = operações com várias etapas e regras de negócio. São a forma padrão de alterar dados.
+- **Views** = consultas reutilizáveis com JOINs e agregações, somente leitura.
+- **Triggers** = apenas auditoria, por ser a única regra que precisa valer para qualquer origem de alteração.

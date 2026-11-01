@@ -66,10 +66,11 @@ create table funcionario(
 	data_demissao date null,
 	status_ativo bit not null,
 	salario numeric(10,2) not null,
-	tipo char(8) not null,
+	tipo char(11) not null,
 
 	constraint pk_funcionario primary key (id_pessoa),
-	constraint fk_funcionario_pessoa foreign key (id_pessoa) references pessoa(id_pessoa) on delete cascade
+	constraint fk_funcionario_pessoa foreign key (id_pessoa) references pessoa(id_pessoa) on delete cascade,
+	constraint ck_funcionario_tipo check (tipo in ('VISTORIADOR', 'AGENTE'))
 );
 GO
 
@@ -275,6 +276,241 @@ begin
 
 		insert into pessoa_juridica (id_pessoa, CNPJ, nome_fantasia, razao_social, data_abertura, inscricao_estadual, porte, status)
 		values (@id, @CNPJ, @nome_fantasia, @razao_social, @data_abertura, @inscricao_estadual, @porte, @status);
+
+		commit transaction;
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+		throw;
+	end catch
+end
+GO
+-- Cadastro de vistoriador (pessoa -> pessoa_fisica -> funcionario -> vistoriador)
+create procedure cadastrar_vistoriador
+	@email varchar(100),
+	@telefone char(14),
+	@endereco varchar(200),
+	@CPF char(11),
+	@nome varchar(100),
+	@data_nasc date,
+	@estado_civil char(15),
+	@nacionalidade varchar(30),
+	@data_admissao date,
+	@salario numeric(10,2),
+	@numero_registro_tecnico varchar(50),
+	@especializacao varchar(50)
+as
+begin
+	declare @id int;
+
+	begin try
+		begin transaction;
+
+		insert into pessoa (email, telefone, endereco, tipo)
+		values (@email, @telefone, @endereco, 'FISICA');
+
+		set @id = SCOPE_IDENTITY();
+
+		insert into pessoa_fisica (id_pessoa, CPF, nome, data_nasc, estado_civil, nacionalidade)
+		values (@id, @CPF, @nome, @data_nasc, @estado_civil, @nacionalidade);
+
+		insert into funcionario (id_pessoa, data_admissao, data_demissao, status_ativo, salario, tipo)
+		values (@id, @data_admissao, NULL, 1, @salario, 'VISTORIADOR');
+
+		insert into vistoriador (id_pessoa, numero_registro_tecnico, especializacao, disponibilidade)
+		values (@id, @numero_registro_tecnico, @especializacao, 1);
+
+		commit transaction;
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+		throw;
+	end catch
+end
+GO
+
+-- Cadastro de agente (pessoa -> pessoa_fisica -> funcionario -> agente)
+create procedure cadastrar_agente
+	@email varchar(100),
+	@telefone char(14),
+	@endereco varchar(200),
+	@CPF char(11),
+	@nome varchar(100),
+	@data_nasc date,
+	@estado_civil char(15),
+	@nacionalidade varchar(30),
+	@data_admissao date,
+	@salario numeric(10,2),
+	@numero_CRECI varchar(20),
+	@porcentagem_comissao numeric(5,4),
+	@regiao_atuacao varchar(50)
+as
+begin
+	declare @id int;
+
+	begin try
+		begin transaction;
+
+		insert into pessoa (email, telefone, endereco, tipo)
+		values (@email, @telefone, @endereco, 'FISICA');
+
+		set @id = SCOPE_IDENTITY();
+
+		insert into pessoa_fisica (id_pessoa, CPF, nome, data_nasc, estado_civil, nacionalidade)
+		values (@id, @CPF, @nome, @data_nasc, @estado_civil, @nacionalidade);
+
+		insert into funcionario (id_pessoa, data_admissao, data_demissao, status_ativo, salario, tipo)
+		values (@id, @data_admissao, NULL, 1, @salario, 'AGENTE');
+
+		insert into agente (id_pessoa, numero_CRECI, porcentagem_comissao, regiao_atuacao)
+		values (@id, @numero_CRECI, @porcentagem_comissao, @regiao_atuacao);
+
+		commit transaction;
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+		throw;
+	end catch
+end
+GO
+
+-- Cadastro de proprietário (pessoa -> pessoa_fisica -> cliente -> proprietario)
+create procedure cadastrar_proprietario
+	@email varchar(100),
+	@telefone char(14),
+	@endereco varchar(200),
+	@CPF char(11),
+	@nome varchar(100),
+	@data_nasc date,
+	@estado_civil char(15),
+	@nacionalidade varchar(30),
+	@senha varchar(250),
+	@preferencia_contato varchar(20),
+	@dados_bancarios_agencia char(6),
+	@dados_bancarios_conta char(15)
+as
+begin
+	declare @id int;
+
+	begin try
+		begin transaction;
+
+		insert into pessoa (email, telefone, endereco, tipo)
+		values (@email, @telefone, @endereco, 'FISICA');
+
+		set @id = SCOPE_IDENTITY();
+
+		insert into pessoa_fisica (id_pessoa, CPF, nome, data_nasc, estado_civil, nacionalidade)
+		values (@id, @CPF, @nome, @data_nasc, @estado_civil, @nacionalidade);
+
+		insert into cliente (id_pessoa, senha, data_cadastro, status_conta)
+		values (@id, @senha, CAST(GETDATE() AS date), 1);
+
+		insert into proprietario (id_pessoa, preferencia_contato, dados_bancarios_agencia, dados_bancarios_conta)
+		values (@id, @preferencia_contato, @dados_bancarios_agencia, @dados_bancarios_conta);
+
+		commit transaction;
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+		throw;
+	end catch
+end
+GO
+
+-- Cadastro de locatário (pessoa -> pessoa_fisica -> cliente -> locatario)
+create procedure cadastrar_locatario
+	@email varchar(100),
+	@telefone char(14),
+	@endereco varchar(200),
+	@CPF char(11),
+	@nome varchar(100),
+	@data_nasc date,
+	@estado_civil char(15),
+	@nacionalidade varchar(30),
+	@senha varchar(250),
+	@renda_mensal numeric(10,2)
+as
+begin
+	declare @id int;
+
+	begin try
+		begin transaction;
+
+		insert into pessoa (email, telefone, endereco, tipo)
+		values (@email, @telefone, @endereco, 'FISICA');
+
+		set @id = SCOPE_IDENTITY();
+
+		insert into pessoa_fisica (id_pessoa, CPF, nome, data_nasc, estado_civil, nacionalidade)
+		values (@id, @CPF, @nome, @data_nasc, @estado_civil, @nacionalidade);
+
+		insert into cliente (id_pessoa, senha, data_cadastro, status_conta)
+		values (@id, @senha, CAST(GETDATE() AS date), 1);
+
+		insert into locatario (id_pessoa, renda_mensal, status_analise_credito)
+		values (@id, @renda_mensal, 'PENDENTE');
+
+		commit transaction;
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+		throw;
+	end catch
+end
+GO
+
+-- Criação de contrato: valida crédito e disponibilidade, grava contrato e marca imóvel como alugado
+create procedure criar_contrato
+	@id_locatario int,
+	@id_imovel int,
+	@data_inicio date,
+	@valor numeric(10,2),
+	@numero_meses int
+as
+begin
+	declare @status_credito varchar(20);
+	declare @status_imovel char(20);
+
+	begin try
+		begin transaction;
+
+		select @status_credito = status_analise_credito
+		from locatario
+		where id_pessoa = @id_locatario;
+
+		if @status_credito is null
+			throw 50001, 'Locatário não encontrado', 1;
+
+		if @status_credito <> 'APROVADO'
+			throw 50002, 'Crédito do locatário não aprovado', 1;
+
+		select @status_imovel = status_anuncio
+		from imovel
+		where id_imovel = @id_imovel;
+
+		if @status_imovel is null
+			throw 50003, 'Imóvel não encontrado', 1;
+
+		if @status_imovel <> 'DISPONÍVEL'
+			throw 50004, 'Imóvel não disponível', 1;
+
+		insert into contrato (id_pessoa, id_imovel, status_proprietario, status_locatario, data_inicio, data_fim, valor, numero_meses)
+		values (@id_locatario, @id_imovel, 1, 1, @data_inicio, NULL, @valor, @numero_meses);
+
+		update imovel
+		set status_anuncio = 'ALUGADO'
+		where id_imovel = @id_imovel;
 
 		commit transaction;
 		return 1;

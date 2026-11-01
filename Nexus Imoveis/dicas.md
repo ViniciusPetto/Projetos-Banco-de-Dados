@@ -18,11 +18,11 @@ _Legenda: ✅ implementada · ⏳ pendente_
 
 ### **Operações de Negócio Complexas:**
 7. ✅ `criar_contrato` — Validar crédito do locatário + INSERT contrato + atualizar status do imóvel (3 ops, validação + transactions)
-8. ⏳ `encerrar_contrato` — UPDATE contrato + gerar vistoria final + listar reparos pendentes (multi-passo com lógica)
-9. ⏳ `registrar_vistoria` — INSERT vistoria + gerar reparos associados (2 ops, transaction)
-10. ⏳ `agendar_visita` — Validar disponibilidade do agente + verificar horário + INSERT agendamento (validação + transaction)
-11. ⏳ `atualizar_disponibilidade_vistoriador` — UPDATE vistoriador + verificar vistorias pendentes (lógica condicional)
-12. ⏳ `excluir_pessoa` — Validar dependências + DELETE em cascata com verificações (validação + transaction)
+8. ✅ `encerrar_contrato` — UPDATE contrato + gerar vistoria final + listar reparos pendentes (multi-passo com lógica)
+9. ✅ `registrar_vistoria` — INSERT vistoria + gerar reparos associados (2 ops, transaction)
+10. ✅ `agendar_visita` — Validar disponibilidade do agente + verificar horário + INSERT agendamento (validação + transaction)
+11. ✅ `atualizar_disponibilidade_vistoriador` — UPDATE vistoriador + verificar vistorias pendentes (lógica condicional)
+12. ✅ `excluir_pessoa` — Validar dependências + DELETE em cascata com verificações (validação + transaction)
 
 ---
 
@@ -54,20 +54,25 @@ As demais regras de trigger foram migradas para procedures (ver seção TRIGGERS
 | **Views** | 8 | 🟡 Média | ⭐⭐⭐ |
 | **Triggers** | 1 | 🟡 Média | ⭐⭐⭐⭐ |
 
-**Status atual:** 7 de 12 procedures implementadas · 0 de 8 views · 1 trigger mantido (auditoria).
+**Status atual:** 12 de 12 procedures implementadas · 0 de 8 views · 1 trigger mantido (auditoria).
 
-**Próximos passos:** implementar as 5 procedures pendentes (`encerrar_contrato`, `registrar_vistoria`, `agendar_visita`, `atualizar_disponibilidade_vistoriador`, `excluir_pessoa`) e depois as views.
+**Próximos passos:** implementar as 8 views; incluir a validação de CPF/CNPJ em `cadastrar_pessoa_fisica` e `cadastrar_pessoa_juridica`.
+
+**Pendências conhecidas:**
+- **Agendamento:** a PK de `agendamento` é `(id_agente, id_locatario)`, então o mesmo par agente/locatário só pode ter uma visita na vida. Sugestão: trocar a PK por `(id_agente, data_visita, hora_visita)`. Aguardando decisão.
+- **Exclusão:** `excluir_pessoa` não tem `@force_delete`. Remover em cascata contratos e vistorias apagaria o histórico, então a procedure bloqueia qualquer dependência.
+- **Domínio de status:** o `CHECK` de `imovel.status_anuncio` aceita somente `DISPONIVEL` e `INDISPONIVEL`. Por isso, imóvel alugado fica `INDISPONIVEL`.
 ___
 
 ## :bust_in_silhouette:
 Poderia me detalhar porque as seguintes operações de procedures de fato serão usadas como procedures? Ou porque são operações mais complexas?
 
 7.	✅ `criar_contrato` — Validar crédito do locatário + INSERT contrato + atualizar status do imóvel (3 ops, validação + transactions)
-8.	⏳ `encerrar_contrato` — UPDATE contrato + gerar vistoria final + listar reparos pendentes (multi-passo com lógica)
-9.	⏳ `registrar_vistoria` — INSERT vistoria + gerar reparos associados (2 ops, transaction)
-10.	⏳ `agendar_visita` — Validar disponibilidade do agente + verificar horário + INSERT agendamento (validação + transaction)
-11.	⏳ `atualizar_disponibilidade_vistoriador` — UPDATE vistoriador + verificar vistorias pendentes (lógica condicional)
-12.	⏳ `excluir_pessoa` — Validar dependências + DELETE em cascata com verificações (validação + transaction)
+8.	✅ `encerrar_contrato` — UPDATE contrato + gerar vistoria final + listar reparos pendentes (multi-passo com lógica)
+9.	✅ `registrar_vistoria` — INSERT vistoria + gerar reparos associados (2 ops, transaction)
+10.	✅ `agendar_visita` — Validar disponibilidade do agente + verificar horário + INSERT agendamento (validação + transaction)
+11.	✅ `atualizar_disponibilidade_vistoriador` — UPDATE vistoriador + verificar vistorias pendentes (lógica condicional)
+12.	✅ `excluir_pessoa` — Validar dependências + DELETE em cascata com verificações (validação + transaction)
 ## :speech_balloon: SSMS
 Excelente pergunta! Vou detalhar cada uma com exemplos práticos de **por que são operações complexas**:
 
@@ -85,7 +90,7 @@ SELECT status_analise_credito FROM locatario WHERE id_pessoa = 5
 -- Problema 2: Múltiplas operações desacopladas
 INSERT INTO contrato (id_pessoa, id_imovel, ...) VALUES (5, 10, ...)
 -- E depois atualizar o imóvel:
-UPDATE imovel SET status_anuncio = 'ALUGADO' WHERE id_imovel = 10
+UPDATE imovel SET status_anuncio = 'INDISPONIVEL' WHERE id_imovel = 10
 -- Se a primeira INSERT falhar e a segunda suceder? Estado inconsistente!
 
 -- COM PROCEDURE (correto):
@@ -117,7 +122,7 @@ BEGIN
         FROM imovel 
         WHERE id_imovel = @id_imovel
         
-        IF @status_imovel != 'DISPONÍVEL'
+        IF @status_imovel != 'DISPONIVEL'
         BEGIN
             THROW 50002, 'Imóvel não disponível', 1
         END
@@ -130,7 +135,7 @@ BEGIN
         
         -- 4️⃣ UPDATE imóvel (ATOMICIDADE: se INSERT falha, isso não executa)
         UPDATE imovel 
-        SET status_anuncio = 'ALUGADO' 
+        SET status_anuncio = 'INDISPONIVEL' 
         WHERE id_imovel = @id_imovel
         
         COMMIT TRANSACTION
@@ -197,9 +202,9 @@ BEGIN
         (id_imovel, id_pessoa, tipo, data_vistoria, descricao_estado_conservacao)
         VALUES (@id_imovel, @id_vistoriador, 'FINAL', @data_fim, '')
         
-        -- 4️⃣ UPDATE imóvel: voltar a DISPONÍVEL
+        -- 4️⃣ UPDATE imóvel: voltar a DISPONIVEL
         UPDATE imovel 
-        SET status_anuncio = 'DISPONÍVEL' 
+        SET status_anuncio = 'DISPONIVEL' 
         WHERE id_imovel = @id_imovel
         
         -- 5️⃣ RETORNAR reparos pendentes (para notificação)
@@ -553,7 +558,7 @@ JOIN proprietario pr ON i.id_pessoa = pr.id_pessoa
 JOIN cliente c ON pr.id_pessoa = c.id_pessoa
 JOIN pessoa p ON pr.id_pessoa = p.id_pessoa
 JOIN pessoa_fisica pf ON p.id_pessoa = pf.id_pessoa
-WHERE i.status_anuncio = 'DISPONÍVEL'
+WHERE i.status_anuncio = 'DISPONIVEL'
 AND pr.preferencia_contato IS NOT NULL
 ORDER BY i.valor_aluguel ASC
 
@@ -579,7 +584,7 @@ JOIN proprietario pr ON i.id_pessoa = pr.id_pessoa
 JOIN cliente c ON pr.id_pessoa = c.id_pessoa
 JOIN pessoa p ON pr.id_pessoa = p.id_pessoa
 JOIN pessoa_fisica pf ON p.id_pessoa = pf.id_pessoa
-WHERE i.status_anuncio = 'DISPONÍVEL'
+WHERE i.status_anuncio = 'DISPONIVEL'
   AND c.status_conta = 1
   AND pf.nome IS NOT NULL
 GO
@@ -1087,7 +1092,7 @@ Regras de negócio de uma operação ficam dentro da procedure que realiza a ope
 **Motivos:**
 - **Fluxo explícito:** em `criar_contrato` estão as validações, o INSERT do contrato e a mudança de status do imóvel, no mesmo lugar. Com trigger, quem insere em `contrato` não sabe que o imóvel mudou de status.
 - **Erros claros:** a procedure devolve mensagens específicas (`THROW 50001` a `50004`) e controla a transação explicitamente (`BEGIN TRANSACTION`, `COMMIT`, `ROLLBACK`).
-- **Sem duplicação:** se a procedure e um trigger fizessem o mesmo efeito (por exemplo, `criar_contrato` e `tr_AtualizarStatusImovelContrato` marcando o imóvel como `ALUGADO`), a regra existiria em dois lugares e poderia ser aplicada duas vezes.
+- **Sem duplicação:** se a procedure e um trigger fizessem o mesmo efeito (por exemplo, `criar_contrato` e `tr_AtualizarStatusImovelContrato` marcando o imóvel como `INDISPONIVEL`), a regra existiria em dois lugares e poderia ser aplicada duas vezes.
 - **Testável:** a procedure roda isolada, com parâmetros conhecidos.
 
 **Trade-off aceito:** a regra só vale quando a operação passa pela procedure. Um INSERT, UPDATE ou DELETE direto na tabela não é validado. Recomendação: a aplicação recebe permissão de `EXECUTE` nas procedures e não de escrita direta nas tabelas.
@@ -1099,10 +1104,10 @@ Regras de negócio de uma operação ficam dentro da procedure que realiza a ope
 | Trigger original | Destino | Status |
 |---|---|---|
 | `tr_AtualizarStatusImovelContrato` | `criar_contrato` | ✅ implementada |
-| `tr_LiberarStatusImovelFimContrato` | `encerrar_contrato` | ⏳ pendente |
-| `tr_ValidarDisponibilidadeVistoriador` | `registrar_vistoria` | ⏳ pendente |
-| `tr_PreventirRepetirAgendamento` | `agendar_visita` | ⏳ pendente |
-| `tr_PreventirDeleteDePessoaComDependencias` | `excluir_pessoa` | ⏳ pendente |
+| `tr_LiberarStatusImovelFimContrato` | `encerrar_contrato` | ✅ implementada |
+| `tr_ValidarDisponibilidadeVistoriador` | `registrar_vistoria` | ✅ implementada |
+| `tr_PreventirRepetirAgendamento` | `agendar_visita` | ✅ implementada |
+| `tr_PreventirDeleteDePessoaComDependencias` | `excluir_pessoa` | ✅ implementada |
 | `tr_ValidarFormatoCPF` | `cadastrar_pessoa_fisica` | ⏳ validação ainda não implementada |
 | `tr_ValidarFormatoCNPJ` | `cadastrar_pessoa_juridica` | ⏳ validação ainda não implementada |
 
@@ -1219,7 +1224,7 @@ SELECT * FROM auditoria_pessoa WHERE id_pessoa = 5 ORDER BY data_operacao DESC
 ┌─────────────────────────────────────────────────────────┐
 │  PROCEDURE: criar_contrato                              │
 │  ✅ Valida crédito e disponibilidade                    │
-│  ✅ INSERT contrato + UPDATE imóvel (ALUGADO)           │
+│  ✅ INSERT contrato + UPDATE imóvel (INDISPONIVEL)           │
 │  ✅ Transação explícita, erros via THROW                │
 └──────────────┬──────────────────────────────────────────┘
                │

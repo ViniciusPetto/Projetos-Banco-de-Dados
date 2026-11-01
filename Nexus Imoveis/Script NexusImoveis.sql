@@ -237,6 +237,9 @@ left join pessoa_juridica pj on p.id_pessoa = pj.id_pessoa
 where i.status_anuncio = 'DISPONIVEL' and c.status_conta = 1 and i.status_aptidao = 1
 GO
 
+SET QUOTED_IDENTIFIER ON;
+GO
+
 -- Procedures
 -- Cadastro de pessoa fisica
 create procedure cadastrar_pessoa_fisica
@@ -526,15 +529,246 @@ begin
 		if @status_imovel is null
 			throw 50003, 'Imóvel não encontrado', 1;
 
-		if @status_imovel <> 'DISPONÍVEL'
+		if @status_imovel <> 'DISPONIVEL'
 			throw 50004, 'Imóvel não disponível', 1;
 
 		insert into contrato (id_pessoa, id_imovel, status_proprietario, status_locatario, data_inicio, data_fim, valor, numero_meses)
 		values (@id_locatario, @id_imovel, 1, 1, @data_inicio, NULL, @valor, @numero_meses);
 
 		update imovel
-		set status_anuncio = 'ALUGADO'
+		set status_anuncio = 'INDISPONIVEL'
 		where id_imovel = @id_imovel;
+
+		commit transaction;
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+		throw;
+	end catch
+end
+GO
+-- Encerramento de contrato: fecha o contrato, gera vistoria final, libera o imóvel e lista reparos pendentes
+create procedure encerrar_contrato
+	@id_contrato int,
+	@id_vistoriador int,
+	@descricao_estado varchar(500) = NULL
+as
+begin
+	declare @id_imovel int;
+	declare @data_fim date = CAST(GETDATE() AS date);
+
+	begin try
+		begin transaction;
+
+		if not exists (select 1 from contrato where id_contrato = @id_contrato)
+			throw 50010, 'Contrato não encontrado', 1;
+
+		select @id_imovel = id_imovel
+		from contrato
+		where id_contrato = @id_contrato and data_fim is null;
+
+		if @id_imovel is null
+			throw 50011, 'Contrato já encerrado', 1;
+
+		if not exists (select 1 from vistoriador where id_pessoa = @id_vistoriador)
+			throw 50012, 'Vistoriador não encontrado', 1;
+
+		update contrato
+		set data_fim = @data_fim, status_locatario = 0
+		where id_contrato = @id_contrato;
+
+		insert into vistoria (id_imovel, id_pessoa, tipo, descricao_estado_conservacao, data_vistoria)
+		values (@id_imovel, @id_vistoriador, 'FINAL', @descricao_estado, @data_fim);
+
+		update imovel
+		set status_anuncio = 'DISPONIVEL'
+		where id_imovel = @id_imovel;
+
+		commit transaction;
+
+		select r.num_reparo, r.descricao_necessidade, r.responsabilidade_financeira
+		from reparo r
+		join vistoria v on v.id_vistoria = r.id_vistoria
+		where v.id_imovel = @id_imovel and r.status_notificacao = 'PENDENTE';
+
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+		throw;
+	end catch
+end
+GO
+
+-- Registro de vistoria: grava a vistoria, os reparos (recebidos em XML) e marca o vistoriador como ocupado
+create procedure registrar_vistoria
+	@id_imovel int,
+	@id_vistoriador int,
+	@tipo char(7),
+	@descricao_estado varchar(500),
+	@reparos_xml xml = NULL
+as
+begin
+	declare @id_vistoria int;
+	declare @disponibilidade bit;
+
+	begin try
+		begin transaction;
+
+		if not exists (select 1 from imovel where id_imovel = @id_imovel)
+			throw 50013, 'Imóvel não encontrado', 1;
+
+		select @disponibilidade = disponibilidade
+		from vistoriador
+		where id_pessoa = @id_vistoriador;
+
+		if @disponibilidade is null
+			throw 50012, 'Vistoriador não encontrado', 1;
+
+		if @disponibilidade = 0
+			throw 50014, 'Vistoriador não está disponível', 1;
+
+		if @tipo not in ('ENTRADA', 'FINAL')
+			throw 50015, 'Tipo de vistoria inválido', 1;
+
+		insert into vistoria (id_imovel, id_pessoa, tipo, descricao_estado_conservacao, data_vistoria)
+		values (@id_imovel, @id_vistoriador, @tipo, @descricao_estado, CAST(GETDATE() AS date));
+
+		set @id_vistoria = SCOPE_IDENTITY();
+
+		insert into reparo (id_vistoria, data_reparo, status_notificacao, responsabilidade_financeira, descricao_necessidade)
+		select
+			@id_vistoria,
+			CAST(GETDATE() AS date),
+			'PENDENTE',
+			r.value('(responsabilidade)[1]', 'char(12)'),
+			r.value('(descricao)[1]', 'varchar(500)')
+		from @reparos_xml.nodes('/reparos/reparo') as t(r);
+
+		update vistoriador
+		set disponibilidade = 0
+		where id_pessoa = @id_vistoriador;
+
+		commit transaction;
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+		throw;
+	end catch
+end
+GO
+
+-- Agendamento de visita: valida agente ativo, locatário e conflitos de horário
+create procedure agendar_visita
+	@id_agente int,
+	@id_locatario int,
+	@data_visita date,
+	@hora_visita time
+as
+begin
+	declare @status_agente bit;
+
+	begin try
+		begin transaction;
+
+		select @status_agente = f.status_ativo
+		from agente a
+		join funcionario f on f.id_pessoa = a.id_pessoa
+		where a.id_pessoa = @id_agente;
+
+		if @status_agente is null
+			throw 50016, 'Agente não encontrado', 1;
+
+		if @status_agente = 0
+			throw 50018, 'Agente inativo', 1;
+
+		if not exists (select 1 from locatario where id_pessoa = @id_locatario)
+			throw 50017, 'Locatário não encontrado', 1;
+
+		if exists (select 1 from agendamento with (updlock, holdlock)
+				where id_agente = @id_agente and data_visita = @data_visita and hora_visita = @hora_visita)
+			throw 50019, 'Agente já tem visita neste horário', 1;
+
+		if exists (select 1 from agendamento with (updlock, holdlock)
+				where id_locatario = @id_locatario and data_visita = @data_visita and hora_visita = @hora_visita)
+			throw 50020, 'Locatário já tem visita neste horário', 1;
+
+		insert into agendamento (id_agente, id_locatario, data_visita, hora_visita)
+		values (@id_agente, @id_locatario, @data_visita, @hora_visita);
+
+		commit transaction;
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+		throw;
+	end catch
+end
+GO
+
+-- Atualização de disponibilidade do vistoriador: só libera se não há vistorias agendadas para o futuro
+create procedure atualizar_disponibilidade_vistoriador
+	@id_vistoriador int,
+	@disponibilidade bit
+as
+begin
+	begin try
+		begin transaction;
+
+		if not exists (select 1 from vistoriador where id_pessoa = @id_vistoriador)
+			throw 50012, 'Vistoriador não encontrado', 1;
+
+		if @disponibilidade = 1 and exists (
+			select 1 from vistoria
+			where id_pessoa = @id_vistoriador and data_vistoria > CAST(GETDATE() AS date))
+			throw 50021, 'Vistoriador tem vistorias agendadas para o futuro', 1;
+
+		update vistoriador
+		set disponibilidade = @disponibilidade
+		where id_pessoa = @id_vistoriador;
+
+		commit transaction;
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+		throw;
+	end catch
+end
+GO
+
+-- Exclusão de pessoa: bloqueia se houver registros dependentes (o histórico não é apagado)
+create procedure excluir_pessoa
+	@id_pessoa int
+as
+begin
+	begin try
+		begin transaction;
+
+		if not exists (select 1 from pessoa where id_pessoa = @id_pessoa)
+			throw 50022, 'Pessoa não encontrada', 1;
+
+		if exists (select 1 from contrato where id_pessoa = @id_pessoa)
+			throw 50023, 'Pessoa possui contratos como locatário', 1;
+
+		if exists (select 1 from imovel where id_pessoa = @id_pessoa)
+			throw 50024, 'Pessoa possui imóveis cadastrados', 1;
+
+		if exists (select 1 from agendamento where id_agente = @id_pessoa or id_locatario = @id_pessoa)
+			throw 50025, 'Pessoa possui agendamentos', 1;
+
+		if exists (select 1 from vistoria where id_pessoa = @id_pessoa)
+			throw 50026, 'Pessoa possui vistorias registradas', 1;
+
+		delete from pessoa
+		where id_pessoa = @id_pessoa;
 
 		commit transaction;
 		return 1;

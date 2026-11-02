@@ -17,8 +17,8 @@ _Legenda: ✅ implementada · ⏳ pendente_
 6. ✅ `cadastrar_locatario` — INSERT `pessoa` + INSERT `pessoa_fisica` + INSERT `cliente` + INSERT `locatario` (4 ops, FK em cascata)
 
 ### **Operações de Negócio Complexas:**
-7. ✅ `criar_contrato` — Validar crédito do locatário + INSERT contrato + atualizar status do imóvel (3 ops, validação + transactions)
-8. ✅ `encerrar_contrato` — UPDATE contrato + gerar vistoria final + listar reparos pendentes (multi-passo com lógica)
+7. ✅ `criar_contrato` — Validar crédito do locatário + validar disponibilidade do imóvel + INSERT contrato (validação + transactions; o status do imóvel fica com o trigger `preencher_dados_contrato_imovel`)
+8. ✅ `encerrar_contrato` — UPDATE contrato + gerar vistoria final + listar reparos pendentes (multi-passo com lógica; o imóvel é liberado pelo trigger `liberar_status_imovel_contrato`)
 9. ✅ `registrar_vistoria` — INSERT vistoria + gerar reparos associados (2 ops, transaction)
 10. ✅ `excluir_pessoa`
 
@@ -26,9 +26,9 @@ _Legenda: ✅ implementada · ⏳ pendente_
 
 ## **VIEWS (Consultas Complexas com JOINs Reutilizáveis)**
 
-1. ⏳ `imoveis_disponiveis` — JOIN `imovel` + `proprietario` + `pessoa_fisica/juridica`, filtrando por status
-2. ⏳ `historico_contratos_por_locatario` — JOIN `contrato` + `locatario` + `pessoa_fisica` + `imovel` + `proprietario`
-3. ⏳ `detalhes_imovel` — JOIN `imovel` + `proprietario` + `pessoa` + contagem de vistorias/contratos
+1. ✅ `imoveis_disponiveis` — JOIN `imovel` + `proprietario` + `pessoa_fisica/juridica`, filtrando por status
+2. ✅ `historico_contratos_por_locatario` — JOIN `contrato` + `imovel` + `proprietario` + `pessoa_fisica/juridica`, com data prevista de fim e status do contrato (ATIVO, ENCERRADO NO PRAZO, ENCERRADO ANTES DO PRAZO)
+3. ✅ `detalhes_imovel` — JOIN `imovel` + `proprietario` + `pessoa_fisica/juridica` + subqueries de contratos ativos, locatário atual, vistorias e reparos pendentes
 4. ⏳ `relatorio_agentes` — JOIN `agente` + `funcionario` + `pessoa_fisica`, com comissões
 5. ⏳ `vistorias_por_imovel` — JOIN `vistoria` + `imovel` + `vistoriador` + `pessoa_fisica`, com status de reparos
 6. ⏳ `imoveis_com_reparos_pendentes` — JOIN `imovel` + `vistoria` + `reparo`, filtrando por status de reparo
@@ -43,7 +43,9 @@ _Legenda: ✅ implementada · ⏳ pendente_
 2. ✅ `validar_formato_cnpj` — Após INSERT/UPDATE em `pessoa_juridica`, bloqueia CNPJ que não tenha exatamente 14 dígitos numéricos
 3. ✅ `validar_liberacao_vistoriador` — Após UPDATE em `vistoriador`, bloqueia a ativação quando há vistorias agendadas para o futuro (substitui a procedure `atualizar_disponibilidade_vistoriador`)
 4. ✅ `validar_vinculo_agente` — Após INSERT em `agendamento`, bloqueia agente sem vínculo ativo com a empresa (conflitos de horário ficam com PK e UNIQUE)
-5. ⏳ `auditoria_alteracoes_pessoa` — Ao INSERT/UPDATE/DELETE `pessoa`, registrar em tabela de auditoria (ainda não implementada)
+5. ✅ `auditoria_alteracoes_pessoa` — Após INSERT/UPDATE/DELETE em `pessoa`, registra operação, data, usuário e valores antes/depois (XML) na tabela `auditoria_pessoa`
+6. ✅ `preencher_dados_contrato_imovel` — Após INSERT em `contrato`, preenche valor e assinaturas e deixa o imóvel INDISPONIVEL
+7. ✅ `liberar_status_imovel_contrato` — Após UPDATE em `contrato`, devolve o imóvel para DISPONIVEL quando o contrato é encerrado (`data_fim` preenchida)
 
 ---
 ## **RESUMO RECOMENDADO:**
@@ -52,11 +54,11 @@ _Legenda: ✅ implementada · ⏳ pendente_
 |------|-----|-----------|--------------|
 | **Procedures** | 10 | 🔴 Alta | ⭐⭐⭐⭐⭐ |
 | **Views** | 8 | 🟡 Média | ⭐⭐⭐ |
-| **Triggers** | 5 | 🟡 Média | ⭐⭐⭐⭐ |
+| **Triggers** | 7 | 🟡 Média | ⭐⭐⭐⭐ |
 
-**Status atual:** 10 procedures implementadas · 4 triggers implementados · 0 de 8 views · auditoria pendente.
+**Status atual:** 10 procedures implementadas · 7 triggers implementados · 3 de 8 views.
 
-**Próximos passos:** implementar as 8 views e a tabela de auditoria com `auditoria_alteracoes_pessoa`.
+**Próximos passos:** implementar as 5 views restantes: `relatorio_agentes`, `vistorias_por_imovel`, `imoveis_com_reparos_pendentes`, `dashboard_locatario` e `agendamentos_proximos_meses`.
 
 **Decisões registradas:**
 - **Agendamento:** PK `(id_agente, data_visita, hora_visita)` e `UNIQUE (id_locatario, data_visita, hora_visita)`. O mesmo par agente/locatário pode ter visitas em horários diferentes, e o banco garante os dois conflitos.
@@ -64,6 +66,9 @@ _Legenda: ✅ implementada · ⏳ pendente_
 - **Validação de CPF/CNPJ:** em trigger, por valer para qualquer INSERT ou UPDATE, independentemente da procedure.
 - **Exclusão:** `excluir_pessoa` não tem `@force_delete`. Remover em cascata contratos e vistorias apagaria o histórico, então a procedure bloqueia qualquer dependência.
 - **Domínio de status:** o `CHECK` de `imovel.status_anuncio` aceita somente `DISPONIVEL` e `INDISPONIVEL`. Por isso, imóvel alugado fica `INDISPONIVEL`.
+- **Status do imóvel no contrato:** fica todo em trigger. `preencher_dados_contrato_imovel` deixa o imóvel INDISPONIVEL na criação e `liberar_status_imovel_contrato` devolve para DISPONIVEL no encerramento. O UPDATE do imóvel saiu de `encerrar_contrato`, então encerrar por UPDATE direto também libera o imóvel.
+- **Auditoria:** `auditoria_pessoa` não tem FK para `pessoa`, para o histórico continuar existindo depois de uma exclusão. Cobre só as colunas de `pessoa` (email, telefone, endereço e tipo); nome e CPF ficam em `pessoa_fisica`.
+- **Views com PF e PJ:** usam `left join` em `pessoa_fisica` e `pessoa_juridica` com `coalesce`, para cliente pessoa jurídica não sumir do resultado.
 ___
 
 ## :bust_in_silhouette:
@@ -971,8 +976,8 @@ A auditoria também fica em trigger, porque precisa registrar alterações feita
 
 | Trigger original | Destino | Status |
 |---|---|---|
-| `atualizar_status_imovel_contrato` | `criar_contrato` | ✅ implementada |
-| `liberar_status_imovel_fim_contrato` | `encerrar_contrato` | ✅ implementada |
+| `atualizar_status_imovel_contrato` | `preencher_dados_contrato_imovel` (trigger) | ✅ implementada |
+| `liberar_status_imovel_fim_contrato` | `liberar_status_imovel_contrato` (trigger) | ✅ implementada |
 | `validar_disponibilidade_vistoriador` | `registrar_vistoria` | ✅ implementada |
 | `prevenir_repetir_agendamento` | `validar_vinculo_agente` (trigger) e PK/UNIQUE de `agendamento` | ✅ implementada |
 | `atualizar_disponibilidade_vistoriador` (procedure) | `validar_liberacao_vistoriador` (trigger) | ✅ implementada |
@@ -1081,7 +1086,9 @@ SELECT * FROM auditoria_pessoa WHERE id_pessoa = 5 ORDER BY data_operacao DESC
 | **validar_formato_cnpj** | AFTER INSERT, UPDATE | Validação: CNPJ com 14 dígitos numéricos |
 | **validar_liberacao_vistoriador** | AFTER UPDATE | Validação: vistoriador não é ativado com vistorias futuras |
 | **validar_vinculo_agente** | AFTER INSERT | Validação: impede agendamento com agente sem vínculo ativo |
-| **auditoria_alteracoes_pessoa** | AFTER INSERT, UPDATE, DELETE | Rastreamento: registra alterações em `pessoa` (pendente) |
+| **auditoria_alteracoes_pessoa** | AFTER INSERT, UPDATE, DELETE | Rastreamento: registra alterações em `pessoa` |
+| **preencher_dados_contrato_imovel** | AFTER INSERT | Consistência: preenche valor e assinaturas do contrato e deixa o imóvel INDISPONIVEL |
+| **liberar_status_imovel_contrato** | AFTER UPDATE | Consistência: devolve o imóvel para DISPONIVEL quando o contrato é encerrado |
 
 ---
 ## **CONCLUSÃO:**
@@ -1097,7 +1104,7 @@ SELECT * FROM auditoria_pessoa WHERE id_pessoa = 5 ORDER BY data_operacao DESC
 ┌─────────────────────────────────────────────────────────┐
 │  PROCEDURE: criar_contrato                              │
 │  ✅ Valida crédito e disponibilidade                    │
-│  ✅ INSERT contrato + UPDATE imóvel (INDISPONIVEL)           │
+│  ✅ INSERT contrato (trigger: imóvel INDISPONIVEL)      │       
 │  ✅ Transação explícita, erros via THROW                │
 └──────────────┬──────────────────────────────────────────┘
                │
@@ -1112,4 +1119,4 @@ VIEW: historico_contratos_por_locatario  (somente leitura)
 
 - **Procedures** = operações com várias etapas e regras de negócio. São a forma padrão de alterar dados.
 - **Views** = consultas reutilizáveis com JOINs e agregações, somente leitura.
-- **Triggers** = validação de formato (CPF/CNPJ) e auditoria: regras que precisam valer para qualquer origem de alteração.
+- **Triggers** = validação de formato (CPF/CNPJ), auditoria e status do imóvel no contrato: regras que precisam valer para qualquer origem de alteração.

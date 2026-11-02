@@ -225,6 +225,7 @@ create table auditoria_pessoa(
 	constraint pk_auditoria_pessoa primary key (id_auditoria),
 	constraint ck_auditoria_operacao check (operacao in ('INSERT', 'UPDATE', 'DELETE'))
 );
+create index idx_auditoria_pessoa_id_pessoa on auditoria_pessoa(id_pessoa);
 GO
 	
 -- Views

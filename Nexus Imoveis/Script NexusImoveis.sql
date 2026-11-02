@@ -213,6 +213,20 @@ create index idx_agendamento_locatario on agendamento(id_locatario);
 create index idx_agendamento_data on agendamento(data_visita);
 GO
 
+create table auditoria_pessoa(
+	id_auditoria int identity not null,
+	id_pessoa int not null,
+	operacao char(6) not null,
+	data_operacao datetime not null default GETDATE(),
+	usuario varchar(128) not null default SYSTEM_USER,
+	valores_anteriores xml null,
+	valores_novos xml null,
+
+	constraint pk_auditoria_pessoa primary key (id_auditoria),
+	constraint ck_auditoria_operacao check (operacao in ('INSERT', 'UPDATE', 'DELETE'))
+);
+GO
+	
 -- Views
 -- Imoveis disponiveis
 create view imoveis_disponiveis as
@@ -236,6 +250,85 @@ join pessoa p on c.id_pessoa = p.id_pessoa
 left join pessoa_fisica pf on p.id_pessoa = pf.id_pessoa
 left join pessoa_juridica pj on p.id_pessoa = pj.id_pessoa
 where i.status_anuncio = 'DISPONIVEL' and c.status_conta = 1 and i.status_aptidao = 1
+GO
+
+-- Historico de contratos por locatario
+create view historico_contratos_por_locatario as
+select
+	c.id_contrato,
+	c.id_pessoa as id_locatario,
+	coalesce(pf_loc.nome, pj_loc.nome_fantasia) as nome_locatario,
+	i.id_imovel,
+	i.endereco as endereco_imovel,
+	i.area_m2,
+	coalesce(pf_prop.nome, pj_prop.nome_fantasia) as nome_proprietario,
+	p_prop.telefone as telefone_proprietario,
+	pr.preferencia_contato,
+	c.valor,
+	c.data_inicio,
+	c.numero_meses,
+	DATEADD(MONTH, c.numero_meses, c.data_inicio) as data_prevista_fim,
+	c.data_fim,
+	DATEDIFF(MONTH, c.data_inicio, coalesce(c.data_fim, CAST(GETDATE() AS date))) as meses_decorridos,
+	c.status_proprietario,
+	c.status_locatario,
+	case
+		when c.data_fim is null then 'ATIVO'
+		when c.data_fim < DATEADD(MONTH, c.numero_meses, c.data_inicio) then 'ENCERRADO ANTES DO PRAZO'
+		else 'ENCERRADO NO PRAZO'
+	end as status_contrato
+from contrato c
+join imovel i on c.id_imovel = i.id_imovel
+join proprietario pr on i.id_pessoa = pr.id_pessoa
+join pessoa p_prop on pr.id_pessoa = p_prop.id_pessoa
+left join pessoa_fisica pf_prop on p_prop.id_pessoa = pf_prop.id_pessoa
+left join pessoa_juridica pj_prop on p_prop.id_pessoa = pj_prop.id_pessoa
+left join pessoa_fisica pf_loc on c.id_pessoa = pf_loc.id_pessoa
+left join pessoa_juridica pj_loc on c.id_pessoa = pj_loc.id_pessoa
+GO
+
+-- Detalhes do imovel
+create view detalhes_imovel as
+select
+	i.id_imovel,
+	i.endereco,
+	i.descricao,
+	i.foto,
+	i.area_m2,
+	i.valor_aluguel,
+	i.num_matricula,
+	i.status_anuncio,
+	i.status_aptidao,
+	coalesce(pf.nome, pj.nome_fantasia) as nome_proprietario,
+	coalesce(pf.CPF, pj.CNPJ) as documento_proprietario,
+	p.tipo as tipo_proprietario,
+	p.telefone as telefone_proprietario,
+	p.email as email_proprietario,
+	pr.preferencia_contato,
+	(select count(*)
+		from contrato c
+		where c.id_imovel = i.id_imovel and c.data_fim is null) as contratos_ativos,
+	(select top 1 coalesce(pf_loc.nome, pj_loc.nome_fantasia)
+		from contrato c
+		left join pessoa_fisica pf_loc on c.id_pessoa = pf_loc.id_pessoa
+		left join pessoa_juridica pj_loc on c.id_pessoa = pj_loc.id_pessoa
+		where c.id_imovel = i.id_imovel and c.data_fim is null
+		order by c.data_inicio desc) as locatario_atual,
+	(select count(*)
+		from vistoria v
+		where v.id_imovel = i.id_imovel) as total_vistorias,
+	(select max(v.data_vistoria)
+		from vistoria v
+		where v.id_imovel = i.id_imovel) as data_ultima_vistoria,
+	(select count(*)
+		from reparo r
+		join vistoria v on r.id_vistoria = v.id_vistoria
+		where v.id_imovel = i.id_imovel and r.status_notificacao = 'PENDENTE') as reparos_pendentes
+from imovel i
+join proprietario pr on i.id_pessoa = pr.id_pessoa
+join pessoa p on pr.id_pessoa = p.id_pessoa
+left join pessoa_fisica pf on p.id_pessoa = pf.id_pessoa
+left join pessoa_juridica pj on p.id_pessoa = pj.id_pessoa
 GO
 
 SET QUOTED_IDENTIFIER ON;
@@ -553,7 +646,7 @@ begin
 end
 GO
 
--- Encerramento de contrato: fecha o contrato, gera vistoria final, libera o imóvel e lista reparos pendentes
+-- Encerramento de contrato: fecha o contrato, gera vistoria final e lista reparos pendentes (o imóvel é liberado pelo trigger liberar_status_imovel_contrato)
 create procedure encerrar_contrato
 	@id_contrato int,
 	@id_vistoriador int,
@@ -585,10 +678,6 @@ begin
 
 		insert into vistoria (id_imovel, id_pessoa, tipo, descricao_estado_conservacao, data_vistoria)
 		values (@id_imovel, @id_vistoriador, 'FINAL', @descricao_estado, @data_fim);
-
-		update imovel
-		set status_anuncio = 'DISPONIVEL'
-		where id_imovel = @id_imovel;
 
 		commit transaction;
 
@@ -731,6 +820,31 @@ begin
 end
 GO
 
+-- Liberação do imóvel: quando o contrato é encerrado (data_fim preenchida), o imóvel volta a ficar disponível
+create trigger liberar_status_imovel_contrato
+on contrato
+after update
+as
+begin
+	if not exists (
+		select 1
+		from inserted ins
+		join deleted d on d.id_contrato = ins.id_contrato
+		where d.data_fim is null and ins.data_fim is not null)
+		return;
+
+	update imovel
+	set status_anuncio = 'DISPONIVEL'
+	from imovel i
+	inner join inserted ins on ins.id_imovel = i.id_imovel
+	inner join deleted d on d.id_contrato = ins.id_contrato
+	where d.data_fim is null and ins.data_fim is not null
+
+	if @@ROWCOUNT = 0
+		rollback transaction
+end
+GO
+		
 -- Liberação do vistoriador: não permite ficar disponível com vistorias agendadas para o futuro
 create trigger validar_liberacao_vistoriador
 on vistoriador
@@ -784,5 +898,38 @@ as
 begin
 	if exists (select 1 from inserted where CNPJ like '%[^0-9]%')
 		throw 50028, 'CNPJ deve conter exatamente 14 dígitos numéricos', 1;
+end
+GO
+
+-- Auditoria de pessoa: registra todo INSERT, UPDATE e DELETE, com os valores antes e depois
+create trigger auditoria_alteracoes_pessoa
+on pessoa
+after insert, update, delete
+as
+begin
+	declare @operacao char(6);
+
+	if not exists (select 1 from inserted) and not exists (select 1 from deleted)
+		return;
+
+	if exists (select 1 from inserted) and exists (select 1 from deleted)
+		set @operacao = 'UPDATE';
+	else if exists (select 1 from inserted)
+		set @operacao = 'INSERT';
+	else
+		set @operacao = 'DELETE';
+
+	insert into auditoria_pessoa (id_pessoa, operacao, valores_anteriores, valores_novos)
+	select
+		coalesce(i.id_pessoa, d.id_pessoa),
+		@operacao,
+		case when d.id_pessoa is not null
+			then (select d.* for xml path('pessoa'), type)
+		end,
+		case when i.id_pessoa is not null
+			then (select i.* for xml path('pessoa'), type)
+		end
+	from inserted i
+	full outer join deleted d on d.id_pessoa = i.id_pessoa;
 end
 GO

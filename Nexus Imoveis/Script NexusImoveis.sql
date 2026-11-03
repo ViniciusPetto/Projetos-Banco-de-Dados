@@ -212,21 +212,6 @@ create table agendamento(
 create index idx_agendamento_locatario on agendamento(id_locatario);
 create index idx_agendamento_data on agendamento(data_visita);
 GO
-
-create table auditoria_pessoa(
-	id_auditoria int identity not null,
-	id_pessoa int not null,
-	operacao char(6) not null,
-	data_operacao datetime not null default GETDATE(),
-	usuario varchar(128) not null default SYSTEM_USER,
-	valores_anteriores xml null,
-	valores_novos xml null,
-
-	constraint pk_auditoria_pessoa primary key (id_auditoria),
-	constraint ck_auditoria_operacao check (operacao in ('INSERT', 'UPDATE', 'DELETE'))
-);
-create index idx_auditoria_pessoa_id_pessoa on auditoria_pessoa(id_pessoa);
-GO
 	
 -- Views
 -- Imoveis disponiveis
@@ -961,38 +946,5 @@ as
 begin
 	if exists (select 1 from inserted where CNPJ like '%[^0-9]%')
 		throw 50028, 'CNPJ deve conter exatamente 14 dígitos numéricos', 1;
-end
-GO
-
--- Auditoria de pessoa: registra todo INSERT, UPDATE e DELETE, com os valores antes e depois
-create trigger auditoria_alteracoes_pessoa
-on pessoa
-after insert, update, delete
-as
-begin
-	declare @operacao char(6);
-
-	if not exists (select 1 from inserted) and not exists (select 1 from deleted)
-		return;
-
-	if exists (select 1 from inserted) and exists (select 1 from deleted)
-		set @operacao = 'UPDATE';
-	else if exists (select 1 from inserted)
-		set @operacao = 'INSERT';
-	else
-		set @operacao = 'DELETE';
-
-	insert into auditoria_pessoa (id_pessoa, operacao, valores_anteriores, valores_novos)
-	select
-		coalesce(i.id_pessoa, d.id_pessoa),
-		@operacao,
-		case when d.id_pessoa is not null
-			then (select d.* for xml path('pessoa'), type)
-		end,
-		case when i.id_pessoa is not null
-			then (select i.* for xml path('pessoa'), type)
-		end
-	from inserted i
-	full outer join deleted d on d.id_pessoa = i.id_pessoa;
 end
 GO

@@ -335,6 +335,68 @@ GO
 SET QUOTED_IDENTIFIER ON;
 GO
 
+create view vistorias_por_imovel as
+select
+	v.id_vistoria,
+	i.id_imovel,
+	i.endereco as endereco_imovel,
+	v.tipo,
+	v.data_vistoria,
+	v.descricao_estado_conservacao,
+	v.id_pessoa as id_vistoriador,
+	pf.nome as nome_vistoriador,
+	vis.especializacao,
+	row_number() over (partition by v.id_imovel order by v.data_vistoria, v.id_vistoria) as numero_vistoria,
+	count(*) over (partition by v.id_imovel) as total_vistorias_imovel
+from vistoria v
+join imovel i on v.id_imovel = i.id_imovel
+join vistoriador vis on v.id_pessoa = vis.id_pessoa
+join pessoa_fisica pf on vis.id_pessoa = pf.id_pessoa
+GO
+
+-- Imoveis com reparos pendentes
+create view imoveis_com_reparos_pendentes as
+select
+	r.num_reparo,
+	i.id_imovel,
+	i.endereco as endereco_imovel,
+	r.id_vistoria,
+	r.data_reparo,
+	r.status_notificacao,
+	r.responsabilidade_financeira,
+	r.descricao_necessidade,
+	coalesce(pf.nome, pj.nome_fantasia) as nome_proprietario,
+	p.telefone as telefone_proprietario
+from reparo r
+join vistoria v on r.id_vistoria = v.id_vistoria
+join imovel i on v.id_imovel = i.id_imovel
+join proprietario pr on i.id_pessoa = pr.id_pessoa
+join pessoa p on pr.id_pessoa = p.id_pessoa
+left join pessoa_fisica pf on p.id_pessoa = pf.id_pessoa
+left join pessoa_juridica pj on p.id_pessoa = pj.id_pessoa
+where r.status_notificacao = 'PENDENTE'
+GO
+
+create view agendamento_proximos_meses as
+select
+	a.id_agente,
+	pf_ag.nome as nome_agente,
+	ag.regiao_atuacao,
+	a.id_locatario,
+	coalesce(pf_loc.nome, pj_loc.nome_fantasia) as nome_locatario,
+	p_loc.telefone as telefone_locatario,
+	a.data_visita,
+	a.hora_visita
+from agendamento a
+join agente ag on a.id_agente = ag.id_pessoa
+join pessoa_fisica pf_ag on ag.id_pessoa = pf_ag.id_pessoa
+join pessoa p_loc on a.id_locatario = p_loc.id_pessoa
+left join pessoa_fisica pf_loc on p_loc.id_pessoa = pf_loc.id_pessoa
+left join pessoa_juridica pj_loc on p_loc.id_pessoa = pj_loc.id_pessoa
+where a.data_visita >= CAST(GETDATE() AS date)
+	and a.data_visita < DATEADD(MONTH, 3, CAST(GETDATE() AS date))
+GO
+
 -- Procedures
 -- Cadastro de pessoa fisica
 create procedure cadastrar_pessoa_fisica

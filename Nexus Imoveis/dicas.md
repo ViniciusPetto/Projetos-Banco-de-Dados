@@ -37,15 +37,14 @@ _Legenda: ✅ implementada · ⏳ pendente_
 
 ---
 
-## **TRIGGERS (validações e auditoria)**
+## **TRIGGERS (validações e consistência)**
 
 1. ✅ `validar_formato_cpf` — Após INSERT/UPDATE em `pessoa_fisica`, bloqueia CPF que não tenha exatamente 11 dígitos numéricos
 2. ✅ `validar_formato_cnpj` — Após INSERT/UPDATE em `pessoa_juridica`, bloqueia CNPJ que não tenha exatamente 14 dígitos numéricos
 3. ✅ `validar_liberacao_vistoriador` — Após UPDATE em `vistoriador`, bloqueia a ativação quando há vistorias agendadas para o futuro (substitui a procedure `atualizar_disponibilidade_vistoriador`)
 4. ✅ `validar_vinculo_agente` — Após INSERT em `agendamento`, bloqueia agente sem vínculo ativo com a empresa (conflitos de horário ficam com PK e UNIQUE)
-5. ✅ `auditoria_alteracoes_pessoa` — Após INSERT/UPDATE/DELETE em `pessoa`, registra operação, data, usuário e valores antes/depois (XML) na tabela `auditoria_pessoa`
-6. ✅ `preencher_dados_contrato_imovel` — Após INSERT em `contrato`, preenche valor e assinaturas e deixa o imóvel INDISPONIVEL
-7. ✅ `liberar_status_imovel_contrato` — Após UPDATE em `contrato`, devolve o imóvel para DISPONIVEL quando o contrato é encerrado (`data_fim` preenchida)
+5. ✅ `preencher_dados_contrato_imovel` — Após INSERT em `contrato`, preenche valor e assinaturas e deixa o imóvel INDISPONIVEL
+6. ✅ `liberar_status_imovel_contrato` — Após UPDATE em `contrato`, devolve o imóvel para DISPONIVEL quando o contrato é encerrado (`data_fim` preenchida)
 
 ---
 ## **RESUMO RECOMENDADO:**
@@ -54,9 +53,9 @@ _Legenda: ✅ implementada · ⏳ pendente_
 |------|-----|-----------|--------------|
 | **Procedures** | 10 | 🔴 Alta | ⭐⭐⭐⭐⭐ |
 | **Views** | 8 | 🟡 Média | ⭐⭐⭐ |
-| **Triggers** | 7 | 🟡 Média | ⭐⭐⭐⭐ |
+| **Triggers** | 6 | 🟡 Média | ⭐⭐⭐⭐ |
 
-**Status atual:** 10 procedures implementadas · 7 triggers implementados · 3 de 8 views.
+**Status atual:** 10 procedures implementadas · 6 triggers implementados · 3 de 8 views.
 
 **Próximos passos:** implementar as 5 views restantes: `relatorio_agentes`, `vistorias_por_imovel`, `imoveis_com_reparos_pendentes`, `dashboard_locatario` e `agendamentos_proximos_meses`.
 
@@ -67,7 +66,6 @@ _Legenda: ✅ implementada · ⏳ pendente_
 - **Exclusão:** `excluir_pessoa` não tem `@force_delete`. Remover em cascata contratos e vistorias apagaria o histórico, então a procedure bloqueia qualquer dependência.
 - **Domínio de status:** o `CHECK` de `imovel.status_anuncio` aceita somente `DISPONIVEL` e `INDISPONIVEL`. Por isso, imóvel alugado fica `INDISPONIVEL`.
 - **Status do imóvel no contrato:** fica todo em trigger. `preencher_dados_contrato_imovel` deixa o imóvel INDISPONIVEL na criação e `liberar_status_imovel_contrato` devolve para DISPONIVEL no encerramento. O UPDATE do imóvel saiu de `encerrar_contrato`, então encerrar por UPDATE direto também libera o imóvel.
-- **Auditoria:** `auditoria_pessoa` não tem FK para `pessoa`, para o histórico continuar existindo depois de uma exclusão. Cobre só as colunas de `pessoa` (email, telefone, endereço e tipo); nome e CPF ficam em `pessoa_fisica`.
 - **Views com PF e PJ:** usam `left join` em `pessoa_fisica` e `pessoa_juridica` com `coalesce`, para cliente pessoa jurídica não sumir do resultado.
 ___
 
@@ -954,7 +952,7 @@ ORDER BY data_visita, hora_visita
 
 ---
 
-# TRIGGERS — Validação de formato e auditoria
+# TRIGGERS — Validação de formato e consistência
 
 ## **Decisão: onde colocar cada regra**
 
@@ -962,8 +960,6 @@ Dois critérios definem o lugar de cada regra:
 
 - **Validação de dados: trigger first.** Regras de formato e integridade que devem valer para qualquer INSERT ou UPDATE, venha de onde vier. Exemplo: CPF e CNPJ. Essas regras começam sempre como trigger.
 - **Operação de negócio: procedure.** Operações com várias etapas, regras de negócio e transação explícita. Exemplo: `criar_contrato`, `registrar_vistoria`.
-
-A auditoria também fica em trigger, porque precisa registrar alterações feitas fora das procedures.
 
 **Motivos:**
 - Um trigger de validação garante a regra em qualquer caminho de escrita. Uma validação só dentro da procedure cobre apenas quem chama a procedure.
@@ -994,87 +990,10 @@ A auditoria também fica em trigger, porque precisa registrar alterações feita
 | Parâmetros | Sim | Não (acessa `inserted` e `deleted`) |
 | Retorno | Código de retorno e resultados; erros via `THROW` | Não retorna valor |
 | Transação | Controlada explicitamente | Faz parte da transação do comando que disparou |
-| Uso típico | Operações com várias etapas e regras de negócio | Validação de dados e auditoria, regras que não podem ser esquecidas |
+| Uso típico | Operações com várias etapas e regras de negócio | Validação de dados e efeitos automáticos, regras que não podem ser esquecidas |
 
 ---
-## **1. `auditoria_alteracoes_pessoa` — Registrar todas as alterações em pessoa**
-
-**Por que é um Trigger:**
-```sql
--- Primeiro, criar tabela de auditoria:
-CREATE TABLE auditoria_pessoa (
-    id_auditoria INT IDENTITY PRIMARY KEY,
-    id_pessoa INT NOT NULL,
-    operacao VARCHAR(10) NOT NULL,  -- INSERT, UPDATE, DELETE
-    data_operacao DATETIME NOT NULL DEFAULT GETDATE(),
-    usuario VARCHAR(100) NOT NULL DEFAULT SYSTEM_USER,
-    valores_anteriores XML NULL,
-    valores_novos XML NULL
-)
-GO
-
--- SEM TRIGGER (problemático):
--- Usuário atualiza pessoa:
-UPDATE pessoa SET nome = 'João Silva' WHERE id_pessoa = 5
--- Ninguém registra quando, quem, o quê foi alterado!
--- Se há erro depois, não há histórico
-
--- COM TRIGGER (correto):
-CREATE TRIGGER auditoria_alteracoes_pessoa
-ON pessoa
-AFTER INSERT, UPDATE, DELETE
-AS
-BEGIN
-    DECLARE @operacao VARCHAR(10)
-    
-    -- Determinar qual operação
-    IF EXISTS (SELECT 1 FROM inserted) AND EXISTS (SELECT 1 FROM deleted)
-        SET @operacao = 'UPDATE'
-    ELSE IF EXISTS (SELECT 1 FROM inserted)
-        SET @operacao = 'INSERT'
-    ELSE
-        SET @operacao = 'DELETE'
-    
-    -- Registrar auditoria
-    INSERT INTO auditoria_pessoa (id_pessoa, operacao, valores_anteriores, valores_novos)
-    SELECT 
-        ISNULL(d.id_pessoa, i.id_pessoa),
-        @operacao,
-        -- Valores anteriores (DELETE e UPDATE)
-        CASE WHEN d.id_pessoa IS NOT NULL 
-             THEN (SELECT d.* FOR XML PATH('pessoa_antes'))
-             ELSE NULL 
-        END,
-        -- Valores novos (INSERT e UPDATE)
-        CASE WHEN i.id_pessoa IS NOT NULL 
-             THEN (SELECT i.* FOR XML PATH('pessoa_depois'))
-             ELSE NULL 
-        END
-    FROM inserted i
-    FULL OUTER JOIN deleted d ON i.id_pessoa = d.id_pessoa
-    
-    PRINT 'Auditoria registrada: ' + @operacao
-END
-GO
-
--- Agora qualquer operação é registrada:
-INSERT INTO pessoa (...) VALUES (...)  -- Registra INSERT
-UPDATE pessoa SET email = '...' WHERE id_pessoa = 5  -- Registra UPDATE
-DELETE FROM pessoa WHERE id_pessoa = 5  -- Registra DELETE
-
--- Depois consultar histórico:
-SELECT * FROM auditoria_pessoa WHERE id_pessoa = 5 ORDER BY data_operacao DESC
--- Resultado:
--- id_auditoria | id_pessoa | operacao | data_operacao | usuario | valores_anteriores | valores_novos
-```
-
-**Por que é um Trigger:**
-- ✅ **AFTER INSERT, UPDATE, DELETE** — ativa em todas operações
-- ✅ **Captura completa** — registra antes (deleted) e depois (inserted)
-- ✅ **XML** — preserva todos os valores em formato estruturado
-- ✅ **Rastreabilidade** — quando, quem, o quê foi alterado
-- ✅ **Automático** — qualquer alteração é registrada
-- ✅ **Compliance** — requisito legal/regulatório
+| Uso típico | Operações com várias etapas e regras de negócio | Validação de dados e efeitos automáticos, regras que não podem ser esquecidas |
 
 ---
 
@@ -1086,7 +1005,6 @@ SELECT * FROM auditoria_pessoa WHERE id_pessoa = 5 ORDER BY data_operacao DESC
 | **validar_formato_cnpj** | AFTER INSERT, UPDATE | Validação: CNPJ com 14 dígitos numéricos |
 | **validar_liberacao_vistoriador** | AFTER UPDATE | Validação: vistoriador não é ativado com vistorias futuras |
 | **validar_vinculo_agente** | AFTER INSERT | Validação: impede agendamento com agente sem vínculo ativo |
-| **auditoria_alteracoes_pessoa** | AFTER INSERT, UPDATE, DELETE | Rastreamento: registra alterações em `pessoa` |
 | **preencher_dados_contrato_imovel** | AFTER INSERT | Consistência: preenche valor e assinaturas do contrato e deixa o imóvel INDISPONIVEL |
 | **liberar_status_imovel_contrato** | AFTER UPDATE | Consistência: devolve o imóvel para DISPONIVEL quando o contrato é encerrado |
 
@@ -1104,14 +1022,14 @@ SELECT * FROM auditoria_pessoa WHERE id_pessoa = 5 ORDER BY data_operacao DESC
 ┌─────────────────────────────────────────────────────────┐
 │  PROCEDURE: criar_contrato                              │
 │  ✅ Valida crédito e disponibilidade                    │
-│  ✅ INSERT contrato (trigger: imóvel INDISPONIVEL)      │       
+│  ✅ INSERT contrato                                     │    
 │  ✅ Transação explícita, erros via THROW                │
 └──────────────┬──────────────────────────────────────────┘
                │
                ▼
 ┌─────────────────────────────────────────────────────────┐
-│  TRIGGER: auditoria_alteracoes_pessoa                  │
-│  ✅ Registra qualquer alteração em pessoa               │
+│  TRIGGER: preencher_dados_contrato_imovel               │
+│  ✅ Preenche o valor e deixa o imóvel INDISPONIVEL      │
 └─────────────────────────────────────────────────────────┘
 
 VIEW: historico_contratos_por_locatario  (somente leitura)
@@ -1119,4 +1037,4 @@ VIEW: historico_contratos_por_locatario  (somente leitura)
 
 - **Procedures** = operações com várias etapas e regras de negócio. São a forma padrão de alterar dados.
 - **Views** = consultas reutilizáveis com JOINs e agregações, somente leitura.
-- **Triggers** = validação de formato (CPF/CNPJ), auditoria e status do imóvel no contrato: regras que precisam valer para qualquer origem de alteração.
+- **Triggers** = validação de formato (CPF/CNPJ) e status do imóvel no contrato: regras que precisam valer para qualquer origem de alteração.

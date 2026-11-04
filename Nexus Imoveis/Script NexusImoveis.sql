@@ -820,6 +820,7 @@ end
 GO
 
 -- Exclusão de pessoa: bloqueia se houver registros dependentes (o histórico não é apagado)
+-- Exclusao de pessoa: confere se existe e dispara o delete (o trigger validar_dependencias valida)
 create procedure excluir_pessoa
 	@id_pessoa int
 as
@@ -830,20 +831,8 @@ begin
 		if not exists (select 1 from pessoa where id_pessoa = @id_pessoa)
 			throw 50022, 'Pessoa não encontrada', 1;
 
-		if exists (select 1 from contrato where id_pessoa = @id_pessoa)
-			throw 50023, 'Pessoa possui contratos como locatário', 1;
-
-		if exists (select 1 from imovel where id_pessoa = @id_pessoa)
-			throw 50024, 'Pessoa possui imóveis cadastrados', 1;
-
-		if exists (select 1 from agendamento where id_agente = @id_pessoa or id_locatario = @id_pessoa)
-			throw 50025, 'Pessoa possui agendamentos', 1;
-
-		if exists (select 1 from vistoria where id_pessoa = @id_pessoa)
-			throw 50026, 'Pessoa possui vistorias registradas', 1;
-
 		delete from pessoa
-		where id_pessoa = @id_pessoa;
+		where id_pessoa = @id_pessoa;   -- trigger validar_dependencias faz a validação
 
 		commit transaction;
 		return 1;
@@ -851,6 +840,40 @@ begin
 	begin catch
 		if @@TRANCOUNT > 0
 			rollback transaction;
+		throw;
+	end catch
+end
+GO
+--Criar agendamento
+create procedure criar_agendamento
+	@id_agente int,
+	@id_locatario int,
+	@data_visita date,
+	@hora_visita time
+as
+begin
+	begin try
+		begin transaction;
+
+		if not exists (select 1 from agente where id_pessoa = @id_agente)
+			throw 50030, 'Agente não encontrado', 1;
+
+		if not exists (select 1 from locatario where id_pessoa = @id_locatario)
+			throw 50031, 'Locatário não encontrado', 1;
+
+		insert into agendamento (id_agente, id_locatario, data_visita, hora_visita)
+		values (@id_agente, @id_locatario, @data_visita, @hora_visita);   -- triggers validam o resto
+
+		commit transaction;
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+
+		if ERROR_NUMBER() in (2627, 2601)
+			throw 50036, 'Já existe visita nesse mesmo horário', 1;
+
 		throw;
 	end catch
 end
@@ -994,5 +1017,71 @@ begin
 		end
 	from inserted i
 	full outer join deleted d on d.id_pessoa = i.id_pessoa;
+end
+GO
+
+-- Validacao de agendamento: conta ativa, data futura e intervalo minimo entre visitas
+create trigger validar_agendamento
+on agendamento
+after insert
+as
+begin
+	if exists (select 1
+			   from inserted i
+			   join cliente c on c.id_pessoa = i.id_locatario
+			   where c.status_conta = 0)
+		throw 50032, 'Conta do locatário está inativa', 1;
+
+	if exists (select 1
+			   from inserted i
+			   where i.data_visita < CAST(GETDATE() AS date)
+				  or (i.data_visita = CAST(GETDATE() AS date) and i.hora_visita <= CAST(GETDATE() AS time)))
+		throw 50033, 'A data e hora da visita devem ser futuras', 1;
+
+	-- intervalo minimo de 60 min entre visitas do mesmo agente
+	if exists (select 1
+			   from inserted i
+			   join agendamento a on a.id_agente = i.id_agente
+								 and a.data_visita = i.data_visita
+								 and a.hora_visita <> i.hora_visita
+			   where ABS(DATEDIFF(MINUTE, a.hora_visita, i.hora_visita)) < 60)
+		throw 50034, 'Agente já possui visita em horário muito próximo', 1;
+
+	-- intervalo minimo de 60 min entre visitas do mesmo locatario
+	if exists (select 1
+			   from inserted i
+			   join agendamento a on a.id_locatario = i.id_locatario
+								 and a.data_visita = i.data_visita
+								 and a.hora_visita <> i.hora_visita
+			   where ABS(DATEDIFF(MINUTE, a.hora_visita, i.hora_visita)) < 60)
+		throw 50035, 'Locatário já possui visita em horário muito próximo', 1;
+end
+GO
+
+use NexusImoveis;
+GO
+
+-- Exclusao de pessoa: bloqueia se houver dependencias; sem dependencias, apaga (as filhas caem em cascata)
+alter trigger validar_dependencias
+on pessoa
+instead of delete
+as
+begin
+	if exists (select 1 from contrato where id_pessoa in (select id_pessoa from deleted))
+		throw 50023, 'Pessoa possui contratos como locatário', 1;
+
+	if exists (select 1 from imovel where id_pessoa in (select id_pessoa from deleted))
+		throw 50024, 'Pessoa possui imóveis cadastrados', 1;
+
+	if exists (select 1 from agendamento
+			   where id_agente in (select id_pessoa from deleted)
+				  or id_locatario in (select id_pessoa from deleted))
+		throw 50025, 'Pessoa possui agendamentos', 1;
+
+	if exists (select 1 from vistoria where id_pessoa in (select id_pessoa from deleted))
+		throw 50026, 'Pessoa possui vistorias registradas', 1;
+
+	delete from pessoa
+	where id_pessoa in (select id_pessoa from deleted);
 end
 GO

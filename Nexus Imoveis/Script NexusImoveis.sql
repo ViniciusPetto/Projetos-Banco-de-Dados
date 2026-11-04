@@ -14,11 +14,15 @@ GO
 use NexusImoveis;
 GO
 
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+
 -- Tables and Indexes
 
 create table pessoa (
 	id_pessoa int identity not null,
-	email varchar(100) null,
+	email varchar(100) not null,
 	telefone char(14) not null,
 	endereco varchar(200) not null,
 	tipo char(8) not null,
@@ -123,6 +127,7 @@ create table locatario(
 	renda_mensal numeric(10,2) not null,
 	status_analise_credito varchar(20) not null,
 
+	constraint ck_status_analise_credito check (status_analise_credito in ('PENDENTE', 'APROVADO', 'REPROVADO')),
 	constraint pk_locatario primary key(id_pessoa),
 	constraint fk_locatario_cliente foreign key (id_pessoa) references cliente(id_pessoa) on delete cascade
 );
@@ -166,6 +171,7 @@ create table contrato(
 create index idx_contrato_locatario on contrato(id_pessoa);
 create index idx_contrato_imovel on contrato(id_imovel);
 create index idx_contrato_data_inicio on contrato(data_inicio);
+create unique index ux_contrato_ativo_imovel on contrato(id_imovel) where data_fim is null;
 GO
 
 create table vistoria(
@@ -178,7 +184,8 @@ create table vistoria(
 
 	constraint pk_vistoria primary key(id_vistoria),
 	constraint fk_vistoria_imovel foreign key (id_imovel) references imovel(id_imovel),
-	constraint fk_vistoria_vistoriador foreign key (id_pessoa) references vistoriador(id_pessoa)
+	constraint fk_vistoria_vistoriador foreign key (id_pessoa) references vistoriador(id_pessoa),
+	constraint ck_vistoria_tipo check (tipo in ('ENTRADA', 'SAIDA'))
 );
 create index idx_vistoria_imovel on vistoria(id_imovel);
 create index idx_vistoria_vistoriador on vistoria(id_pessoa);
@@ -194,7 +201,9 @@ create table reparo(
 
 	constraint pk_reparo primary key(id_vistoria, num_reparo),
 	constraint fk_reparo_vistoria foreign key (id_vistoria) references vistoria(id_vistoria),
-	constraint uq_reparo unique (num_reparo)
+	constraint uq_reparo unique (num_reparo),
+	constraint ck_reparo_status check (status_notificacao in ('PENDENTE', 'NOTIFICADO')),
+	constraint ck_reparo_responsabilidade check (responsabilidade_financeira in ('PROPRIETARIO', 'LOCATARIO'))
 );
 GO
 
@@ -460,6 +469,20 @@ left join pessoa_fisica pf on pf.id_pessoa = p.id_pessoa
 left join pessoa_juridica pj on pj.id_pessoa = p.id_pessoa
 GO
 
+-- Situação dos contratos: meses ocupados, quebra antecipada e validação (ambas as assinaturas)
+create view situacao_contratos as
+select
+	c.id_contrato,
+	c.id_pessoa as id_locatario,
+	c.id_imovel,
+	c.data_inicio,
+	c.data_fim,
+	c.numero_meses,
+	DATEDIFF(month, c.data_inicio, ISNULL(c.data_fim, CAST(GETDATE() AS date))) as meses_ocupados,
+	case when c.data_fim is not null and c.data_fim < DATEADD(month, c.numero_meses, c.data_inicio) then 1 else 0 end as quebra_antecipada,
+	case when c.status_proprietario = 1 and c.status_locatario = 1 then 1 else 0 end as contrato_validado
+from contrato c;
+GO
 -- Procedures
 -- Cadastro de pessoa fisica
 create procedure cadastrar_pessoa_fisica
@@ -717,11 +740,12 @@ begin
 end
 GO
 
--- Criação de contrato: valida crédito e disponibilidade, grava contrato e marca imóvel como alugado
+-- Criação de contrato: valida crédito e disponibilidade, grava o contrato com o valor negociado (assinaturas pendentes) e marca o imóvel como indisponível
 create procedure criar_contrato
 	@id_locatario int,
 	@id_imovel int,
 	@data_inicio date,
+	@valor numeric(10,2),
 	@numero_meses int
 as
 begin
@@ -729,21 +753,14 @@ begin
 	declare @status_imovel char(20);
 
 	begin try
-		begin transaction
+		begin transaction;
 
-		select @id_locatario = id_pessoa
-		from locatario
-		where id_pessoa = @id_locatario
-
-		if @id_locatario is null
+		if not exists (select 1 from locatario where id_pessoa = @id_locatario)
 			throw 50001, 'Locatário não encontrado', 1;
 
 		select @status_credito = status_analise_credito
 		from locatario
 		where id_pessoa = @id_locatario;
-
-		if @status_credito is null
-			throw 50002, 'Status de crédito não encontrado', 1;
 
 		if @status_credito <> 'APROVADO'
 			throw 50003, 'Crédito do locatário não aprovado', 1;
@@ -759,7 +776,11 @@ begin
 			throw 50005, 'Imóvel não disponível', 1;
 
 		insert into contrato (id_pessoa, id_imovel, status_proprietario, status_locatario, data_inicio, data_fim, valor, numero_meses)
-		values (@id_locatario, @id_imovel, 0, 0, @data_inicio, NULL, 0, @numero_meses);
+		values (@id_locatario, @id_imovel, 0, 0, @data_inicio, NULL, @valor, @numero_meses);
+
+		update imovel
+		set status_anuncio = 'INDISPONIVEL'
+		where id_imovel = @id_imovel;
 
 		commit transaction;
 		return 1;
@@ -772,7 +793,36 @@ begin
 end
 GO
 
--- Encerramento de contrato: fecha o contrato, gera vistoria final e lista reparos pendentes (o imóvel é liberado pelo trigger liberar_status_imovel_contrato)
+-- Assinatura do contrato: registra separadamente a assinatura do proprietário ou do locatário
+create procedure registrar_assinatura_contrato
+	@id_contrato int,
+	@papel varchar(12)
+as
+begin
+	begin try
+		begin transaction;
+
+		if not exists (select 1 from contrato where id_contrato = @id_contrato and data_fim is null)
+			throw 50030, 'Contrato não encontrado ou já encerrado', 1;
+
+		if @papel = 'PROPRIETARIO'
+			update contrato set status_proprietario = 1 where id_contrato = @id_contrato;
+		else if @papel = 'LOCATARIO'
+			update contrato set status_locatario = 1 where id_contrato = @id_contrato;
+		else
+			throw 50031, 'Papel de assinatura inválido', 1;
+
+		commit transaction;
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+		throw;
+	end catch
+end
+GO
+-- Encerramento de contrato: fecha o contrato, gera vistoria de saída, libera o imóvel e lista reparos pendentes
 create procedure encerrar_contrato
 	@id_contrato int,
 	@id_vistoriador int,
@@ -803,7 +853,11 @@ begin
 		where id_contrato = @id_contrato;
 
 		insert into vistoria (id_imovel, id_pessoa, tipo, descricao_estado_conservacao, data_vistoria)
-		values (@id_imovel, @id_vistoriador, 'FINAL', @descricao_estado, @data_fim);
+		values (@id_imovel, @id_vistoriador, 'SAIDA', @descricao_estado, @data_fim);
+
+		update imovel
+		set status_anuncio = 'DISPONIVEL'
+		where id_imovel = @id_imovel;
 
 		commit transaction;
 
@@ -822,7 +876,7 @@ begin
 end
 GO
 
--- Registro de vistoria: grava a vistoria e os reparos (recebidos em XML)
+-- Registro de vistoria: grava a vistoria, os reparos (recebidos em XML) e marca o vistoriador como ocupado
 create procedure registrar_vistoria
 	@id_imovel int,
 	@id_vistoriador int,
@@ -850,7 +904,7 @@ begin
 		if @disponibilidade = 0
 			throw 50014, 'Vistoriador não está disponível', 1;
 
-		if @tipo not in ('ENTRADA', 'FINAL')
+		if @tipo not in ('ENTRADA', 'SAIDA')
 			throw 50015, 'Tipo de vistoria inválido', 1;
 
 		insert into vistoria (id_imovel, id_pessoa, tipo, descricao_estado_conservacao, data_vistoria)
@@ -878,7 +932,7 @@ begin
 end
 GO
 
--- Exclusão de pessoa: bloqueia se houver registros dependentes (o histórico não é apagado)
+-- Exclusão de pessoa: confere se existe e dispara o delete (o trigger validar_dependencias valida)
 create procedure excluir_pessoa
 	@id_pessoa int
 as
@@ -889,20 +943,8 @@ begin
 		if not exists (select 1 from pessoa where id_pessoa = @id_pessoa)
 			throw 50022, 'Pessoa não encontrada', 1;
 
-		if exists (select 1 from contrato where id_pessoa = @id_pessoa)
-			throw 50023, 'Pessoa possui contratos como locatário', 1;
-
-		if exists (select 1 from imovel where id_pessoa = @id_pessoa)
-			throw 50024, 'Pessoa possui imóveis cadastrados', 1;
-
-		if exists (select 1 from agendamento where id_agente = @id_pessoa or id_locatario = @id_pessoa)
-			throw 50025, 'Pessoa possui agendamentos', 1;
-
-		if exists (select 1 from vistoria where id_pessoa = @id_pessoa)
-			throw 50026, 'Pessoa possui vistorias registradas', 1;
-
 		delete from pessoa
-		where id_pessoa = @id_pessoa;
+		where id_pessoa = @id_pessoa;   -- trigger validar_dependencias faz a validação
 
 		commit transaction;
 		return 1;
@@ -915,58 +957,42 @@ begin
 end
 GO
 
+--Criar agendamento
+create procedure criar_agendamento
+	@id_agente int,
+	@id_locatario int,
+	@data_visita date,
+	@hora_visita time
+as
+begin
+	begin try
+		begin transaction;
+
+		if not exists (select 1 from agente where id_pessoa = @id_agente)
+			throw 50030, 'Agente não encontrado', 1;
+
+		if not exists (select 1 from locatario where id_pessoa = @id_locatario)
+			throw 50031, 'Locatário não encontrado', 1;
+
+		insert into agendamento (id_agente, id_locatario, data_visita, hora_visita)
+		values (@id_agente, @id_locatario, @data_visita, @hora_visita);   -- triggers validam o resto
+
+		commit transaction;
+		return 1;
+	end try
+	begin catch
+		if @@TRANCOUNT > 0
+			rollback transaction;
+
+		if ERROR_NUMBER() in (2627, 2601)
+			throw 50036, 'Já existe visita nesse mesmo horário', 1;
+
+		throw;
+	end catch
+end
+GO
+
 -- Triggers
--- Preenchimento automatico de dados do contrato e alteracao da disponibilidade do imovel
-create trigger preencher_dados_contrato_imovel on contrato for insert
-as
-begin
-	update contrato
-	set status_proprietario = 1,
-		status_locatario = 1,
-		valor = i.valor_aluguel
-	from contrato c
-	inner join inserted ins on c.id_contrato = ins.id_contrato
-	inner join imovel i on ins.id_imovel = i.id_imovel
-
-	if @@ROWCOUNT > 0
-	begin
-		update imovel
-		set status_anuncio = 'INDISPONIVEL'
-		where id_imovel in (select id_imovel from inserted)
-
-		if @@ROWCOUNT = 0
-			rollback transaction
-	end
-	else
-		rollback transaction
-end
-GO
-
--- Liberação do imóvel: quando o contrato é encerrado (data_fim preenchida), o imóvel volta a ficar disponível
-create trigger liberar_status_imovel_contrato
-on contrato
-after update
-as
-begin
-	if not exists (
-		select 1
-		from inserted ins
-		join deleted d on d.id_contrato = ins.id_contrato
-		where d.data_fim is null and ins.data_fim is not null)
-		return;
-
-	update imovel
-	set status_anuncio = 'DISPONIVEL'
-	from imovel i
-	inner join inserted ins on ins.id_imovel = i.id_imovel
-	inner join deleted d on d.id_contrato = ins.id_contrato
-	where d.data_fim is null and ins.data_fim is not null
-
-	if @@ROWCOUNT = 0
-		rollback transaction
-end
-GO
-		
 -- Liberação do vistoriador: não permite ficar disponível com vistorias agendadas para o futuro
 create trigger validar_liberacao_vistoriador
 on vistoriador
@@ -1039,5 +1065,68 @@ begin
 		select 1
 		from inserted i
 		where i.id_pessoa = v.id_pessoa);
+end
+GO
+
+-- Validação de agendamento: conta ativa, data futura e intervalo minimo entre visitas
+create trigger validar_agendamento
+on agendamento
+after insert, update
+as
+begin
+	if exists (select 1
+			   from inserted i
+			   join cliente c on c.id_pessoa = i.id_locatario
+			   where c.status_conta = 0)
+		throw 50032, 'Conta do locatário está inativa', 1;
+
+	if exists (select 1
+			   from inserted i
+			   where i.data_visita < CAST(GETDATE() AS date)
+				  or (i.data_visita = CAST(GETDATE() AS date) and i.hora_visita <= CAST(GETDATE() AS time)))
+		throw 50033, 'A data e hora da visita devem ser futuras', 1;
+
+	-- intervalo mínimo de 60 min entre visitas do mesmo agente
+	if exists (select 1
+			   from inserted i
+			   join agendamento a on a.id_agente = i.id_agente
+								 and a.data_visita = i.data_visita
+								 and a.hora_visita <> i.hora_visita
+			   where ABS(DATEDIFF(MINUTE, a.hora_visita, i.hora_visita)) < 60)
+		throw 50034, 'Agente já possui visita em horário muito próximo', 1;
+
+	-- intervalo mínimo de 60 min entre visitas do mesmo locatario
+	if exists (select 1
+			   from inserted i
+			   join agendamento a on a.id_locatario = i.id_locatario
+								 and a.data_visita = i.data_visita
+								 and a.hora_visita <> i.hora_visita
+			   where ABS(DATEDIFF(MINUTE, a.hora_visita, i.hora_visita)) < 60)
+		throw 50035, 'Locatário já possui visita em horário muito próximo', 1;
+end
+GO
+
+-- Exclusão de pessoa: bloqueia se houver dependencias; sem dependencias, apaga (as filhas caem em cascata)
+create trigger validar_dependencias
+on pessoa
+instead of delete
+as
+begin
+	if exists (select 1 from contrato where id_pessoa in (select id_pessoa from deleted))
+		throw 50023, 'Pessoa possui contratos como locatário', 1;
+
+	if exists (select 1 from imovel where id_pessoa in (select id_pessoa from deleted))
+		throw 50024, 'Pessoa possui imóveis cadastrados', 1;
+
+	if exists (select 1 from agendamento
+			   where id_agente in (select id_pessoa from deleted)
+				  or id_locatario in (select id_pessoa from deleted))
+		throw 50025, 'Pessoa possui agendamentos', 1;
+
+	if exists (select 1 from vistoria where id_pessoa in (select id_pessoa from deleted))
+		throw 50026, 'Pessoa possui vistorias registradas', 1;
+
+	delete from pessoa
+	where id_pessoa in (select id_pessoa from deleted);
 end
 GO

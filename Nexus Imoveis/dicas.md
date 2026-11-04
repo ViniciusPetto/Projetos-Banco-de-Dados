@@ -55,18 +55,27 @@ _Legenda: ✅ implementada · ⏳ pendente_
 | **Views** | 8 | 🟡 Média | ⭐⭐⭐ |
 | **Triggers** | 6 | 🟡 Média | ⭐⭐⭐⭐ |
 
-**Status atual:** 10 procedures implementadas · 6 triggers implementados · 3 de 8 views.
+**Status atual:** 11 procedures implementadas · 4 triggers implementados · 7 views criadas (6 do mapeamento + `situacao_contratos`) · auditoria removida do escopo.
 
-**Próximos passos:** implementar as 5 views restantes: `relatorio_agentes`, `vistorias_por_imovel`, `imoveis_com_reparos_pendentes`, `dashboard_locatario` e `agendamentos_proximos_meses`.
+**Próximos passos:** views `relatorio_agentes` e `dashboard_locatario` do mapeamento; decidir sobre vendas (ver pendências).
 
 **Decisões registradas:**
 - **Agendamento:** PK `(id_agente, data_visita, hora_visita)` e `UNIQUE (id_locatario, data_visita, hora_visita)`. O mesmo par agente/locatário pode ter visitas em horários diferentes, e o banco garante os dois conflitos.
-- **Procedures que viraram triggers:** `atualizar_disponibilidade_vistoriador` (virou `validar_liberacao_vistoriador`) e `agendar_visita` (virou `validar_vinculo_agente`, já que os conflitos de horário são garantidos pelo banco).
+- **Contrato:** nasce com as assinaturas pendentes (`0`). `registrar_assinatura_contrato` marca cada lado separadamente. O contrato está validado quando as duas assinaturas estão marcadas (view `situacao_contratos`).
+- **Um contrato ativo por imóvel:** garantido por índice único filtrado (`ux_contrato_ativo_imovel`), além da checagem na procedure.
+- **Valor:** o valor negociado é informado em `criar_contrato`. O valor do aluguel do imóvel não é copiado automaticamente.
+- **Tipo de vistoria:** `ENTRADA` ou `SAIDA`. A vistoria de encerramento grava `SAIDA`.
+- **Triggers de contrato removidos:** `preencher_dados_contrato_imovel` e `liberar_status_imovel_contrato` duplicavam as procedures. A marcação e a liberação do imóvel agora ficam em `criar_contrato` e `encerrar_contrato`.
 - **Validação de CPF/CNPJ:** em trigger, por valer para qualquer INSERT ou UPDATE, independentemente da procedure.
-- **Exclusão:** `excluir_pessoa` não tem `@force_delete`. Remover em cascata contratos e vistorias apagaria o histórico, então a procedure bloqueia qualquer dependência.
-- **Domínio de status:** o `CHECK` de `imovel.status_anuncio` aceita somente `DISPONIVEL` e `INDISPONIVEL`. Por isso, imóvel alugado fica `INDISPONIVEL`.
-- **Status do imóvel no contrato:** fica todo em trigger. `preencher_dados_contrato_imovel` deixa o imóvel INDISPONIVEL na criação e `liberar_status_imovel_contrato` devolve para DISPONIVEL no encerramento. O UPDATE do imóvel saiu de `encerrar_contrato`, então encerrar por UPDATE direto também libera o imóvel.
-- **Views com PF e PJ:** usam `left join` em `pessoa_fisica` e `pessoa_juridica` com `coalesce`, para cliente pessoa jurídica não sumir do resultado.
+- **Exclusão:** `excluir_pessoa` não tem `@force_delete`. Remover em cascata contratos e vistorias apagaria o histórico.
+- **Domínio de status:** `imovel.status_anuncio` aceita `DISPONIVEL` e `INDISPONIVEL`. Imóvel alugado fica `INDISPONIVEL`.
+
+**Pendências conhecidas:**
+- **Agenda por horário de trabalho do agente:** não há onde guardar o expediente. Precisaria de uma tabela própria.
+- **Multa por quebra antecipada:** a view `situacao_contratos` identifica a quebra, mas o percentual da multa ainda não foi definido.
+- **Vendas:** a descrição do sistema cita venda, mas a entrega final cobre só locação. Não há tabela de venda.
+- **Fotos do imóvel:** `imovel.foto` guarda uma coluna só. O requisito fala em fotos no plural.
+- **Aptidão do imóvel com reparos:** o requisito sugere marcar o imóvel como inapto quando há reparos. Ainda não está automatizado.
 ___
 
 ## :bust_in_silhouette:

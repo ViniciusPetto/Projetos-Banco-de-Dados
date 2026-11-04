@@ -5,7 +5,7 @@ GO
 
 if exists (select name from sys.databases where name = 'NexusImoveis')
 	alter database NexusImoveis set single_user with rollback immediate;
-    drop database NexusImoveis;
+	drop database NexusImoveis;
 GO
 
 create database NexusImoveis;
@@ -382,6 +382,84 @@ where a.data_visita >= CAST(GETDATE() AS date)
 	and a.data_visita < DATEADD(MONTH, 3, CAST(GETDATE() AS date))
 GO
 
+-- Dashboard do locatario
+create view dashboard_locatario as
+select
+	l.id_pessoa as id_locatario,
+	coalesce(pf.nome, pj.nome_fantasia) as nome,
+	coalesce(pf.CPF, pj.CNPJ) as documento,
+	p.tipo as tipo_pessoa,
+	p.email,
+	p.telefone,
+	p.endereco,
+	l.renda_mensal,
+	l.status_analise_credito,
+	c.data_cadastro,
+	c.status_conta,
+	case when ca.id_contrato is not null then 1 else 0 end as possui_contrato_ativo,
+	ca.id_contrato as id_contrato_ativo,
+	ca.id_imovel as id_imovel_atual,
+	i.endereco as endereco_imovel_atual,
+	ca.data_inicio,
+	ca.data_prevista_termino,
+	ca.valor as valor_contrato,
+	ag.qtd_futuros as quantidade_agendamentos_futuros,
+	tot.qtd_contratos as quantidade_total_contratos,
+	tot.qtd_imoveis as quantidade_imoveis_diferentes
+from locatario l
+join cliente c on c.id_pessoa = l.id_pessoa
+join pessoa p on p.id_pessoa = c.id_pessoa
+left join pessoa_fisica pf on pf.id_pessoa = p.id_pessoa
+left join pessoa_juridica pj on pj.id_pessoa = p.id_pessoa
+outer apply (
+	select top (1)
+		ct.id_contrato, ct.id_imovel, ct.data_inicio, ct.valor,
+		dateadd(month, ct.numero_meses, ct.data_inicio) as data_prevista_termino
+	from contrato ct
+	where ct.id_pessoa = l.id_pessoa
+	  and ct.data_fim is null
+	order by ct.data_inicio desc, ct.id_contrato desc
+) ca
+left join imovel i on i.id_imovel = ca.id_imovel
+outer apply (
+	select count(*) as qtd_futuros
+	from agendamento a
+	where a.id_locatario = l.id_pessoa
+	  and (a.data_visita > cast(getdate() as date)
+	       or (a.data_visita = cast(getdate() as date)
+	           and a.hora_visita > cast(getdate() as time)))
+) ag
+outer apply (
+	select count(*) as qtd_contratos,
+	       count(distinct ct.id_imovel) as qtd_imoveis
+	from contrato ct
+	where ct.id_pessoa = l.id_pessoa
+) tot;
+GO
+
+-- Relatorio de agentes
+create view relatorio_agentes as
+select
+	a.id_pessoa as id_agente,
+	p.tipo as tipo_pessoa,
+	coalesce(pf.nome, pj.nome_fantasia) as nome,
+	coalesce(pf.CPF, pj.CNPJ) as documento,
+	p.telefone,
+	p.email,
+	a.numero_CRECI,
+	a.porcentagem_comissao,
+	a.regiao_atuacao,
+	f.data_admissao,
+	f.data_demissao,
+	f.status_ativo,
+	f.salario
+from agente a
+join funcionario f on f.id_pessoa = a.id_pessoa
+join pessoa p on p.id_pessoa = a.id_pessoa
+left join pessoa_fisica pf on pf.id_pessoa = p.id_pessoa
+left join pessoa_juridica pj on pj.id_pessoa = p.id_pessoa
+GO
+
 -- Procedures
 -- Cadastro de pessoa fisica
 create procedure cadastrar_pessoa_fisica
@@ -744,7 +822,7 @@ begin
 end
 GO
 
--- Registro de vistoria: grava a vistoria, os reparos (recebidos em XML) e marca o vistoriador como ocupado
+-- Registro de vistoria: grava a vistoria e os reparos (recebidos em XML)
 create procedure registrar_vistoria
 	@id_imovel int,
 	@id_vistoriador int,
@@ -788,10 +866,6 @@ begin
 			r.value('(responsabilidade)[1]', 'char(12)'),
 			r.value('(descricao)[1]', 'varchar(500)')
 		from @reparos_xml.nodes('/reparos/reparo') as t(r);
-
-		update vistoriador
-		set disponibilidade = 0
-		where id_pessoa = @id_vistoriador;
 
 		commit transaction;
 		return 1;
@@ -847,10 +921,10 @@ create trigger preencher_dados_contrato_imovel on contrato for insert
 as
 begin
 	update contrato
-	set status_proprietario = 1, 
+	set status_proprietario = 1,
 		status_locatario = 1,
-		valor = i.valor_aluguel 
-	from contrato c 
+		valor = i.valor_aluguel
+	from contrato c
 	inner join inserted ins on c.id_contrato = ins.id_contrato
 	inner join imovel i on ins.id_imovel = i.id_imovel
 
@@ -946,5 +1020,24 @@ as
 begin
 	if exists (select 1 from inserted where CNPJ like '%[^0-9]%')
 		throw 50028, 'CNPJ deve conter exatamente 14 dígitos numéricos', 1;
+end
+GO
+
+-- Marcar vistoriador indisponivel apos vistoria
+create trigger marcar_vistoriador_indisponivel
+on vistoria
+after insert
+as
+begin
+	set nocount on;
+
+	update v
+	set v.disponibilidade = 0
+	from vistoriador v
+	where v.disponibilidade = 1
+	  and exists (
+		select 1
+		from inserted i
+		where i.id_pessoa = v.id_pessoa);
 end
 GO

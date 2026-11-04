@@ -218,7 +218,6 @@ create table agendamento(
 	constraint fk_agendamento_agente foreign key (id_agente) references agente(id_pessoa),
 	constraint fk_agendamento_locatario foreign key (id_locatario) references locatario(id_pessoa)
 );
-create index idx_agendamento_locatario on agendamento(id_locatario);
 create index idx_agendamento_data on agendamento(data_visita);
 GO
 	

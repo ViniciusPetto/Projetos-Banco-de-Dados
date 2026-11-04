@@ -804,8 +804,7 @@ begin
 end
 GO
 
--- Exclusão de pessoa: bloqueia se houver registros dependentes (o histórico não é apagado)
--- Exclusao de pessoa: confere se existe e dispara o delete (o trigger validar_dependencias valida)
+-- Exclusão de pessoa: confere se existe e dispara o delete (o trigger validar_dependencias valida)
 create procedure excluir_pessoa
 	@id_pessoa int
 as
@@ -829,6 +828,7 @@ begin
 	end catch
 end
 GO
+
 --Criar agendamento
 create procedure criar_agendamento
 	@id_agente int,
@@ -972,10 +972,10 @@ begin
 end
 GO
 
--- Validacao de agendamento: conta ativa, data futura e intervalo minimo entre visitas
+-- Validação de agendamento: conta ativa, data futura e intervalo minimo entre visitas
 create trigger validar_agendamento
 on agendamento
-after insert
+after insert, update
 as
 begin
 	if exists (select 1
@@ -990,7 +990,7 @@ begin
 				  or (i.data_visita = CAST(GETDATE() AS date) and i.hora_visita <= CAST(GETDATE() AS time)))
 		throw 50033, 'A data e hora da visita devem ser futuras', 1;
 
-	-- intervalo minimo de 60 min entre visitas do mesmo agente
+	-- intervalo mínimo de 60 min entre visitas do mesmo agente
 	if exists (select 1
 			   from inserted i
 			   join agendamento a on a.id_agente = i.id_agente
@@ -999,7 +999,7 @@ begin
 			   where ABS(DATEDIFF(MINUTE, a.hora_visita, i.hora_visita)) < 60)
 		throw 50034, 'Agente já possui visita em horário muito próximo', 1;
 
-	-- intervalo minimo de 60 min entre visitas do mesmo locatario
+	-- intervalo mínimo de 60 min entre visitas do mesmo locatario
 	if exists (select 1
 			   from inserted i
 			   join agendamento a on a.id_locatario = i.id_locatario
@@ -1010,11 +1010,8 @@ begin
 end
 GO
 
-use NexusImoveis;
-GO
-
--- Exclusao de pessoa: bloqueia se houver dependencias; sem dependencias, apaga (as filhas caem em cascata)
-alter trigger validar_dependencias
+-- Exclusão de pessoa: bloqueia se houver dependencias; sem dependencias, apaga (as filhas caem em cascata)
+create trigger validar_dependencias
 on pessoa
 instead of delete
 as
